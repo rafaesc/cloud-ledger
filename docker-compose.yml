@@ -1,0 +1,41 @@
+services:
+
+  floci:
+    image: floci/floci:latest
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,dynamodb,lambda,iam,logs
+    networks:
+      - getcloudledger
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloudledger-postgres
+    environment:
+      POSTGRES_DB: cloudledger
+      POSTGRES_USER: cloudledger
+      POSTGRES_PASSWORD: cloudledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - getcloudledger
+
+  redis:
+    image: redis:7-alpine
+    container_name: cloudledger-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - getcloudledger
+
+volumes:
+  postgres_data:
+
+networks:
+  getcloudledger:
+    name: getcloudledger
+    driver: bridge

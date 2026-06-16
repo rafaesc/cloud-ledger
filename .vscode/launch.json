@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-ApiApplication<java>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.getcloudledger.api.ApiApplication",
+            "projectName": "java",
+            "args": "-Dspring.output.ansi.enabled=ALWAYS",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
