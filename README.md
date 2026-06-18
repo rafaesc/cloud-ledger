@@ -18,38 +18,36 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
 │ CloudLedger                                                         │
 │                                                                     │
-│  ┌──────────────┐  commands  ┌─────────────────────────────┐       │
-│  │  Client /    │ ──────────▶│  Spring Boot 3 API          │       │
-│  │  k6 tests    │            │  (ECS Fargate)              │       │
-│  └──────────────┘            │  - Command handlers         │       │
-│                              │  - Query handlers           │       │
-│                              │  - JWT (Cognito)            │       │
-│                              │  - Idempotency filter       │       │
-│                              └──────┬──────────┬────────────┘       │
-│                                     │ JDBC     │ async outbox       │
-│                          ┌──────────▼──────┐   │                   │
-│                          │  Aurora PgSQL   │   │                   │
-│                          │  - events table │   │                   │
-│                          │  - outbox table │   │                   │
-│                          └─────────────────┘   │                   │
-│                                                ▼                   │
-│  ┌──────────────┐       ┌──────────────┐  ┌────────────────────┐  │
-│  │ ElastiCache  │◀───── │    Lambda    │◀─│        SQS         │  │
-│  │    Redis     │       │   Projector  │  └────────────────────┘  │
-│  │  (balance    │       │              │                           │
-│  │   cache)     │       └──────┬───────┘                          │
-│  └──────────────┘              │                                   │
-│                                ▼                                   │
-│                       ┌───────────────┐                            │
-│                       │   DynamoDB    │                            │
-│                       │ (projections  │                            │
-│                       │  BALANCE,     │                            │
-│                       │  STATE, TXNS#)│                            │
-│                       └───────────────┘                            │
+│   Client ──commands──▶  Spring Boot 3 API  (ECS Fargate)            │
+│                       │  command handlers · JWT · idempotency       │
+│          ┌────────────┴──────────────┐                              │
+│          │ 1. JDBC                    │ 2. write-through            │
+│          │   (events+outbox, one tx)  │    {balance,version}        │
+│          ▼                            ▼    (Lua version-CAS)        │
+│   ┌─────────────────┐          ┌──────────────┐                     │
+│   │  Aurora PgSQL   │          │ ElastiCache  │                     │
+│   │  events+outbox  │          │    Redis     │                     │
+│   └────────┬────────┘          │ (balance+ver)│                     │
+│            │ 3. outbox poller   └──────▲───────┘                    │
+│            ▼                           │ backstop                   │
+│      ┌──────────┐   ┌──────────────┐   │ (version-CAS)              │
+│      │   SQS    │──▶│    Lambda    │───┘                            │
+│      └──────────┘   │   Projector  │                                │
+│                     └──────┬───────┘                                │
+│                            ▼                                        │
+│                   ┌──────────────────┐                              │
+│                   │     DynamoDB     │                              │
+│                   │ BALANCE · STATE  │                              │
+│                   │ · TXNS#          │                              │
+│                   └──────────────────┘                              │
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Write ordering & balance cache (ADR-012):** within a command, the API (1) commits `events + outbox` to Aurora in one transaction, then (2) **write-throughs** the new `{balance, version}` to Redis — so the cache is fresh *after* the outbox commit and *before* the async fan-out. Only later does (3) the outbox poller publish to SQS, and the Lambda projector update the durable DynamoDB projection and repopulate Redis as a **backstop**. Both Redis writers share one Lua version-CAS, so a late projection of an older event can never regress a fresher write-through (read-your-writes). The write path itself **never reads** balance from the cache or projection — sufficient-funds validation always rehydrates the aggregate from the Aurora event store (no double-spend, no bypass of the version fence).
 
 ---
 
@@ -59,6 +57,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 |---|---|---|
 | Event store | Aurora PostgreSQL (ACID) | Optimistic lock + event insert must be one atomic transaction |
 | Read model | DynamoDB + Redis | Sub-10ms balance reads; Redis hot path, DynamoDB for cache misses |
+| Read-your-writes | Command-path Redis write-through (version-CAS) | `GET /balance` reflects the caller's just-committed transfer with no CQRS lag window; projector backstop covers the Redis-down case (ADR-012) |
 | Event fan-out | Transactional Outbox → SQS | Guarantees publication even if the API crashes after Aurora commit |
 | Concurrency control | Optimistic locking (version counter) | No distributed locks; contention surfaces as a 409, not silent data corruption |
 | Idempotency | Per-request UUID key stored in Aurora | Safe client retries; same key always returns the same response |
@@ -72,6 +71,15 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 ```bash
 # Start local dependencies (PostgreSQL + Redis + LocalStack for SQS/DynamoDB)
 docker compose up -d
+
+# Run database migrations
+./mvnw flyway:migrate
+
+# Run the API
+./mvnw spring-boot:run
+
+# Run unit + integration tests
+./mvnw verify
 ```
 
 ---
@@ -89,9 +97,11 @@ docker compose up -d
 | `POST` | `/v1/accounts/{accountId}/freeze` | Freeze an account |
 | `POST` | `/v1/accounts/{accountId}/close` | Close an account |
 | `GET` | `/v1/accounts/{accountId}` | Get account metadata and status |
-| `GET` | `/v1/accounts/{accountId}/balance` | Get current balance (Redis hot path, DynamoDB fallback) |
+| `GET` | `/v1/accounts/{accountId}/balance` | Get current balance (Redis hot path w/ command-path write-through for read-your-writes, DynamoDB fallback) |
 | `GET` | `/v1/accounts/{accountId}/transactions` | Paginated transaction history (newest-first, cursor-based) |
 | `GET` | `/v1/accounts?owner_id={ownerId}` | List all accounts belonging to an owner |
+
+Full request/response schemas, error codes, and the OpenAPI 3.1 stub are in [`docs/api-design.md`](docs/api-design.md).
 
 ---
 
@@ -99,29 +109,37 @@ docker compose up -d
 
 ```
 cloud-ledger/
-├── api/                     # Spring Boot 3 (ECS Fargate) — Java/Gradle
-│   └── src/
-│       ├── main/java/com/cloudledger/
-│       │   ├── presentation/    # REST controllers, filters (JWT, idempotency, rate limit)
-│       │   ├── application/     # command handlers, query handlers
-│       │   ├── domain/          # Account aggregate, events, TransferPolicy
-│       │   └── infrastructure/  # Aurora, DynamoDB, Redis, SQS repositories
-│       └── test/
-│           ├── unit/            # pure domain logic, no I/O
-│           └── integration/     # Testcontainers (PostgreSQL, Redis) + LocalStack (SQS, DynamoDB)
-├── projector/               # Lambda (SQS → DynamoDB + Redis) — TypeScript
-│   ├── src/
-│   │   └── handler.ts
-│   ├── package.json
-│   └── tsconfig.json
+├── src/main/java/com/cloudledger/
+│   ├── presentation/        # REST controllers, filters (JWT, idempotency, rate limit)
+│   ├── application/         # command handlers, query handlers
+│   ├── domain/              # Account aggregate, events, TransferPolicy
+│   └── infrastructure/      # Aurora, DynamoDB, Redis, SQS repositories
+├── src/test/
+│   ├── unit/                # pure domain logic, no I/O
+│   └── integration/         # Testcontainers (PostgreSQL, Redis) + LocalStack (SQS, DynamoDB)
 ├── terraform/               # all AWS infrastructure as code
 ├── docs/
 │   ├── cloud-ledger.md      # full reference architecture + ADRs
 │   ├── cloud-ledger-tier1.md # build plan (Tier-1 MVP)
 │   ├── api-design.md        # HTTP contract + OpenAPI stub
 │   ├── dynamodb-schema.md   # DynamoDB single-table design
-│   └── domain-model.md      # domain model (aggregates, events, commands) + SQS event schema
+│   └── domain-model.md      # domain model (aggregates, events, commands)
 └── README.md
 ```
+
+---
+
+## The Three Demo Scenarios
+
+These are the strongest live demonstrations of the system's correctness guarantees:
+
+**1. Idempotency demo**
+Make a deposit with an `Idempotency-Key`. Replay the exact same request with the same key. The API returns the original `201` response with the original body — no second debit, no second event written to Aurora. Proves that client retries (after timeouts or network drops) are safe by design.
+
+**2. Concurrent conflict demo**
+Fire two transfers from the same account simultaneously. One lands first and advances the account version. The second receives `409 Conflict` with the current version in the response body. The client re-reads, retries with the updated version, and the transfer succeeds. Final balance is exactly correct — money is neither lost nor created.
+
+**3. CQRS projection lag + read-your-writes demo**
+Issue a transfer. The command returns immediately after the Aurora commit and write-throughs the new balance to Redis under a version-CAS, so a `GET /balance` fired right away is already correct (read-your-writes, ADR-012). Within ~2 seconds the outbox poller publishes to SQS and the Lambda projector updates the durable DynamoDB projection. The `X-Projection-Lag-Ms` response header surfaces the measured lag in real time — ≈0 on a write-through hit, rising only when Redis is down and the read falls back to the projector-populated value.
 
 > The event contract between `api` and `projector` is the JSON payload published to SQS, defined in `docs/domain-model.md`. Each service owns its own types locally.

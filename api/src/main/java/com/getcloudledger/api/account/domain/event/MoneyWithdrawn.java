@@ -12,7 +12,7 @@ import java.util.UUID;
 @Getter
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class MoneyWithdrawn extends DomainEvent {
+public class MoneyWithdrawn extends DomainEvent implements BalanceAware {
 
     private BigDecimal amount;
 

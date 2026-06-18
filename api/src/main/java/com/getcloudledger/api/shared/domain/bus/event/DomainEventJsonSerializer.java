@@ -19,12 +19,13 @@ public class DomainEventJsonSerializer {
                     {
                         put("event_id", domainEvent.getEventId());
                         put("version", domainEvent.getVersion());
+                        put("sequence_number", domainEvent.getSequenceNumber());
                         put("type", Utils.getEventName(domainEvent.getClass()));
                         put("occurred_on", domainEvent.getOccurredOn());
                         put("attributes", attributes);
                     }
                 });
-                put("meta", new HashMap<String, Object>());
+                put("meta", domainEvent.getDynamicAttributes());
             }
         });
     }

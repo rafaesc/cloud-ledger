@@ -25,6 +25,22 @@ public abstract class BaseEvent {
     @Setter
     private Integer version;
 
+    @Getter
+    @Setter
+    private Long sequenceNumber;
+
+    /**
+     * Out-of-band attributes computed on demand (e.g. {@code balance_after}) and emitted only on the
+     * SQS wire format via {@link DomainEventJsonSerializer#serialize}. Deliberately excluded from
+     * {@link #toPrimitives()} so the immutable event-store payload stays a pure projection of the event.
+     */
+    @Getter
+    private final HashMap<String, Object> dynamicAttributes = new HashMap<>();
+
+    public void putDynamicAttribute(String key, Object value) {
+        this.dynamicAttributes.put(key, value);
+    }
+
     protected BaseEvent(UUID aggregateId, UUID accountId) {
         this.aggregateId = aggregateId;
         this.accountId = accountId;

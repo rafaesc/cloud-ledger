@@ -12,31 +12,34 @@ import java.util.UUID;
 @Getter
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class TransferCredited extends DomainEvent implements BalanceAware {
+public class TransferFailed extends DomainEvent implements BalanceAware {
 
     private BigDecimal amount;
     private UUID counterpartAccountId;
     private UUID transferId;
+    private String reason;
 
-    public TransferCredited(UUID aggregateId, UUID accountId, BigDecimal amount,
-                            UUID counterpartAccountId, UUID transferId) {
+    public TransferFailed(UUID aggregateId, UUID accountId, BigDecimal amount,
+                          UUID counterpartAccountId, UUID transferId, String reason) {
         super(aggregateId, accountId);
         this.amount = amount;
         this.counterpartAccountId = counterpartAccountId;
         this.transferId = transferId;
+        this.reason = reason;
     }
 
-    public TransferCredited(UUID aggregateId, UUID accountId, UUID eventId, String occurredOn,
-                            Integer version, BigDecimal amount,
-                            UUID counterpartAccountId, UUID transferId) {
+    public TransferFailed(UUID aggregateId, UUID accountId, UUID eventId, String occurredOn,
+                          Integer version, BigDecimal amount,
+                          UUID counterpartAccountId, UUID transferId, String reason) {
         super(aggregateId, accountId, eventId, occurredOn, version);
         this.amount = amount;
         this.counterpartAccountId = counterpartAccountId;
         this.transferId = transferId;
+        this.reason = reason;
     }
 
     public static String eventName() {
-        return "transfer-credited";
+        return "transfer-failed";
     }
 
     @Override
@@ -50,16 +53,18 @@ public class TransferCredited extends DomainEvent implements BalanceAware {
         primitives.put("amount", amount.toPlainString());
         primitives.put("counterpart_account_id", counterpartAccountId.toString());
         primitives.put("transfer_id", transferId.toString());
+        primitives.put("reason", reason);
         return primitives;
     }
 
     @Override
-    public TransferCredited fromPrimitives(UUID aggregateId, UUID accountId, HashMap<String, Object> body,
-                                           UUID eventId, String occurredOn, Integer version) {
-        return new TransferCredited(
+    public TransferFailed fromPrimitives(UUID aggregateId, UUID accountId, HashMap<String, Object> body,
+                                         UUID eventId, String occurredOn, Integer version) {
+        return new TransferFailed(
                 aggregateId, accountId, eventId, occurredOn, version,
                 new BigDecimal((String) body.get("amount")),
                 UUID.fromString((String) body.get("counterpart_account_id")),
-                UUID.fromString((String) body.get("transfer_id")));
+                UUID.fromString((String) body.get("transfer_id")),
+                (String) body.get("reason"));
     }
 }

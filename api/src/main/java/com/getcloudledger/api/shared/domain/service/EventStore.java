@@ -20,8 +20,7 @@ public class EventStore {
 
     @Retryable(value = ConcurrencyException.class, maxRetries = 3, delay = 100, multiplier = 2.0)
     public void saveEvents(UUID aggregateId, String aggregateType,
-                           List<? extends DomainEvent> events, int expectedVersion,
-                           UUID idempotencyKey) {
+                           List<? extends DomainEvent> events, int expectedVersion) {
         var eventStream = domainEventRepository.findAllByAggregateId(aggregateId);
 
         if (expectedVersion != -1 && !eventStream.isEmpty()
@@ -35,7 +34,7 @@ public class EventStore {
         for (var event : events) {
             version++;
             event.setVersion(version);
-            domainEventRepository.save(aggregateId, aggregateType, event, idempotencyKey);
+            domainEventRepository.save(aggregateId, aggregateType, event);
         }
 
         eventBus.publish(aggregateType, events);

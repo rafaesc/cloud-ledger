@@ -7,6 +7,7 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -26,9 +27,6 @@ public class DomainEventEntity {
 
     private UUID accountId;
 
-    @Column(name = "idempotency_key")
-    private UUID idempotencyKey;
-
     private UUID aggregateId;
 
     private String aggregateType;
@@ -43,4 +41,8 @@ public class DomainEventEntity {
     private Integer version;
 
     private LocalDateTime occurredOn;
+
+    @Generated()
+    @Column(name = "sequence_number", insertable = false, updatable = false)
+    private Long sequenceNumber;
 }

@@ -4,6 +4,7 @@ import com.getcloudledger.api.account.domain.event.AccountOpened;
 import com.getcloudledger.api.account.domain.event.MoneyDeposited;
 import com.getcloudledger.api.account.domain.model.Account;
 import com.getcloudledger.api.account.domain.model.AccountStatus;
+import com.getcloudledger.api.account.domain.port.out.BalanceCache;
 import com.getcloudledger.api.account.domain.valueobject.AccountId;
 import com.getcloudledger.api.shared.domain.bus.event.DomainEvent;
 import com.getcloudledger.api.shared.domain.bus.event.EventBus;
@@ -25,11 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyList;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.nullable;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,7 +45,7 @@ class AccountEventSourcingHandlerTest {
         var account = Account.open(accountId, UUID.randomUUID(), "USD");
         assertFalse(account.pullUncommittedChanges().isEmpty());
 
-        handler.save(account, null);
+        handler.save(account);
 
         assertTrue(account.pullUncommittedChanges().isEmpty(),
                 "Uncommitted changes must be cleared after save");
@@ -57,39 +56,20 @@ class AccountEventSourcingHandlerTest {
     void save_assigns_version_zero_to_first_event() {
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
-        var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus));
+        var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
 
         when(repo.findAllByAggregateId(any())).thenReturn(new ArrayList<>());
-        when(repo.save(any(), anyString(), any(), nullable(UUID.class)))
-                .thenAnswer(inv -> inv.getArgument(2));
+        when(repo.save(any(), anyString(), any())).thenAnswer(inv -> inv.getArgument(2));
 
         var accountId = AccountId.generate();
         var account = Account.open(accountId, UUID.randomUUID(), "USD");
 
-        handler.save(account, null);
+        handler.save(account);
 
         ArgumentCaptor<DomainEvent> captor = ArgumentCaptor.forClass(DomainEvent.class);
-        verify(repo, times(1)).save(eq(accountId.getValue()), eq("account"), captor.capture(), nullable(UUID.class));
+        verify(repo, times(1)).save(eq(accountId.getValue()), eq("account"), captor.capture());
         assertIsInstance(AccountOpened.class, captor.getValue());
         assertEquals(0, captor.getValue().getVersion());
-    }
-
-    @Test
-    @DisplayName("save | forwards idempotency key to the repository")
-    void save_forwards_idempotency_key_to_repository() {
-        DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
-        EventBus eventBus = mock(EventBus.class);
-        var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus));
-
-        when(repo.findAllByAggregateId(any())).thenReturn(new ArrayList<>());
-        when(repo.save(any(), anyString(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
-
-        var idempotencyKey = UUID.randomUUID();
-        var account = Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
-
-        handler.save(account, idempotencyKey);
-
-        verify(repo).save(any(), anyString(), any(), eq(idempotencyKey));
     }
 
     @Test
@@ -97,7 +77,7 @@ class AccountEventSourcingHandlerTest {
     void save_throws_concurrency_exception_when_version_mismatch() {
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
-        var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus));
+        var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
 
         var accountId = AccountId.generate();
         var existingEvent = new AccountOpened(accountId.getValue(), UUID.randomUUID(), "USD");
@@ -107,7 +87,35 @@ class AccountEventSourcingHandlerTest {
         var account = Account.open(accountId, UUID.randomUUID(), "USD");
         account.setVersion(0);
 
-        assertThrows(ConcurrencyException.class, () -> handler.save(account, null));
+        assertThrows(ConcurrencyException.class, () -> handler.save(account));
+    }
+
+    @Test
+    @DisplayName("save | enriches balance-aware events with balance_after before persisting")
+    void save_enriches_balance_aware_events_with_balance_after() {
+        DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
+        EventBus eventBus = mock(EventBus.class);
+        when(repo.findAllByAggregateId(any())).thenReturn(new ArrayList<>());
+        when(repo.save(any(), anyString(), any())).thenAnswer(inv -> inv.getArgument(2));
+        var handler = new AccountEventSourcingHandler(
+                new EventStore(repo, eventBus), mock(BalanceCache.class), List.of(new BalanceAfterEnricher()));
+
+        var accountId = AccountId.generate();
+        var account = Account.open(accountId, UUID.randomUUID(), "USD");
+        account.deposit(new BigDecimal("100.00"));
+
+        handler.save(account);
+
+        ArgumentCaptor<DomainEvent> captor = ArgumentCaptor.forClass(DomainEvent.class);
+        verify(repo, times(2)).save(eq(accountId.getValue()), eq("account"), captor.capture());
+
+        var opened = captor.getAllValues().get(0);
+        assertFalse(opened.getDynamicAttributes().containsKey("balance_after"),
+                "AccountOpened is not balance-aware and must not be enriched");
+
+        var deposited = captor.getAllValues().get(1);
+        assertEquals("100.00", deposited.getDynamicAttributes().get("balance_after"),
+                "MoneyDeposited must carry balance_after equal to the resulting account balance");
     }
 
     @Test
@@ -152,9 +160,8 @@ class AccountEventSourcingHandlerTest {
         EventBus eventBus = mock(EventBus.class);
         when(repo.findAllByAggregateId(any())).thenReturn(storedEvents instanceof ArrayList
                 ? storedEvents : new ArrayList<>(storedEvents));
-        when(repo.save(any(), anyString(), any(), nullable(UUID.class)))
-                .thenAnswer(inv -> inv.getArgument(2));
-        return new AccountEventSourcingHandler(new EventStore(repo, eventBus));
+        when(repo.save(any(), anyString(), any())).thenAnswer(inv -> inv.getArgument(2));
+        return new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
     }
 
     private static void assertIsInstance(Class<?> expected, Object actual) {

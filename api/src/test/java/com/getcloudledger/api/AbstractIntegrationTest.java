@@ -1,6 +1,7 @@
 package com.getcloudledger.api;
 
 import com.getcloudledger.api.shared.adapter.in.PostgresContainerBase;
+import com.getcloudledger.api.shared.adapter.in.RedisContainerBase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -17,5 +18,7 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", PostgresContainerBase.POSTGRES::getPassword);
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
         registry.add("spring.jpa.properties.hibernate.dialect", () -> "org.hibernate.dialect.PostgreSQLDialect");
+        registry.add("spring.data.redis.host", RedisContainerBase.REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> RedisContainerBase.REDIS.getMappedPort(6379));
     }
 }

@@ -1,6 +1,7 @@
 package com.getcloudledger.api.account.domain.service;
 
 import com.getcloudledger.api.account.domain.model.Account;
+import com.getcloudledger.api.account.domain.port.out.BalanceCache;
 import com.getcloudledger.api.account.domain.valueobject.AccountId;
 import com.getcloudledger.api.shared.domain.bus.event.DomainEvent;
 import com.getcloudledger.api.shared.domain.service.EventStore;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,16 +19,28 @@ import java.util.UUID;
 public class AccountEventSourcingHandler {
 
     private final EventStore eventStore;
+    private final BalanceCache balanceCache;
+    private final List<AccountEventEnricher> enrichers;
 
     @Transactional
-    public void save(Account aggregate, UUID idempotencyKey) {
+    public void save(Account aggregate) {
+        var uncommittedEvents = aggregate.pullUncommittedChanges();
+        enrich(uncommittedEvents, aggregate);
         eventStore.saveEvents(
                 aggregate.getId().getValue(),
                 aggregate.aggregateType(),
-                aggregate.pullUncommittedChanges(),
-                aggregate.getVersion(),
-                idempotencyKey);
+                uncommittedEvents,
+                aggregate.getVersion());
         aggregate.markChangesAsCommitted();
+        balanceCache.put(aggregate.getId().getValue(), aggregate.getBalance());
+    }
+
+    private void enrich(List<DomainEvent> events, Account aggregate) {
+        for (var event : events) {
+            for (var enricher : enrichers) {
+                enricher.enrich(event, aggregate);
+            }
+        }
     }
 
     public Optional<Account> getById(AccountId accountId) {

@@ -9,5 +9,5 @@ public interface DomainEventRepository<T extends DomainEvent> {
 
     List<T> findAllByAggregateId(UUID aggregateId);
 
-    T save(UUID aggregateId, String aggregateType, T domainEvent, UUID idempotencyKey);
+    T save(UUID aggregateId, String aggregateType, T domainEvent);
 }

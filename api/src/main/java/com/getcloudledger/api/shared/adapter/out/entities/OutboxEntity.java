@@ -4,9 +4,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -15,13 +17,35 @@ import java.util.UUID;
 @Table(name = "outbox", schema = "cloudledger")
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class OutboxEntity {
 
     @Id
     @Column(name = "event_id", nullable = false)
     private UUID eventId;
 
+    /**
+     * The exact SQS wire format ({@link com.getcloudledger.api.shared.domain.bus.event.DomainEventJsonSerializer#serialize}),
+     * including dynamic attributes under {@code meta}. This differs from {@code events.payload}, which
+     * stores the pure {@code serializePrimitives()} projection. Captured at write time so the relay
+     * publishes a byte-for-byte stable message.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private String payload;
+
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
+
+    @Column(name = "sequence_number", nullable = false)
+    private Long sequenceNumber;
+
+    @Generated
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    public OutboxEntity(UUID eventId, String payload, Long sequenceNumber) {
+        this.eventId = eventId;
+        this.payload = payload;
+        this.sequenceNumber = sequenceNumber;
+    }
 }

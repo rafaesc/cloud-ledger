@@ -46,7 +46,7 @@ public class JpaDomainEventRepositoryAdapter<T extends DomainEvent> implements D
     }
 
     @Override
-    public T save(UUID aggregateId, String aggregateType, T domainEvent, UUID idempotencyKey) {
+    public T save(UUID aggregateId, String aggregateType, T domainEvent) {
         var entity = new DomainEventEntity();
         entity.setEventId(domainEvent.getEventId());
         entity.setAccountId(domainEvent.getAccountId());
@@ -56,9 +56,9 @@ public class JpaDomainEventRepositoryAdapter<T extends DomainEvent> implements D
         entity.setOccurredOn(Utils.stringToDate(domainEvent.getOccurredOn()));
         entity.setPayload(DomainEventJsonSerializer.serializePrimitives(domainEvent));
         entity.setEventName(Utils.getEventName(domainEvent.getClass()));
-        entity.setIdempotencyKey(idempotencyKey);
 
-        jpaDomainEventRepository.save(entity);
+        var saved = jpaDomainEventRepository.saveAndFlush(entity);
+        domainEvent.setSequenceNumber(saved.getSequenceNumber());
         return domainEvent;
     }
 }

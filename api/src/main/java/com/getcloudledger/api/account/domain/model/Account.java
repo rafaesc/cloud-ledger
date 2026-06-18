@@ -7,6 +7,7 @@ import com.getcloudledger.api.account.domain.event.MoneyDeposited;
 import com.getcloudledger.api.account.domain.event.MoneyWithdrawn;
 import com.getcloudledger.api.account.domain.event.TransferCredited;
 import com.getcloudledger.api.account.domain.event.TransferDebited;
+import com.getcloudledger.api.account.domain.event.TransferFailed;
 import com.getcloudledger.api.account.domain.exception.InsufficientFundsException;
 import com.getcloudledger.api.account.domain.valueobject.AccountId;
 import com.getcloudledger.api.shared.domain.entity.AggregateRoot;
@@ -63,6 +64,11 @@ public class Account extends AggregateRoot<AccountId> {
         record(new TransferCredited(getId().getValue(), userId, amount, counterpartAccountId, transferId));
     }
 
+    public void failTransfer(BigDecimal amount, UUID counterpartAccountId, UUID transferId, String reason) {
+        requirePositive(amount);
+        record(new TransferFailed(getId().getValue(), userId, amount, counterpartAccountId, transferId, reason));
+    }
+
     public void freeze() {
         if (status != AccountStatus.ACTIVE) {
             throw new IllegalStateException("Only an ACTIVE account can be frozen, current status: " + status);
@@ -98,6 +104,10 @@ public class Account extends AggregateRoot<AccountId> {
     }
 
     public void apply(TransferCredited event) {
+        this.balance = this.balance.add(event.getAmount());
+    }
+
+    public void apply(TransferFailed event) {
         this.balance = this.balance.add(event.getAmount());
     }
 

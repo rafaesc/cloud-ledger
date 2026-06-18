@@ -1,5 +1,6 @@
 package com.getcloudledger.api.account.domain.model;
 
+import com.getcloudledger.api.account.domain.event.TransferFailed;
 import com.getcloudledger.api.account.domain.exception.InsufficientFundsException;
 import com.getcloudledger.api.account.domain.valueobject.AccountId;
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -202,6 +204,52 @@ class AccountTest {
 
         assertEquals(new BigDecimal("200.00"), sender.getBalance());
         assertEquals(new BigDecimal("300.00"), receiver.getBalance());
+    }
+
+    // ── failTransfer ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("failTransfer | restores balance by adding back the failed transfer amount")
+    void failTransfer_restores_balance() {
+        var account = fundedAccount("500.00");
+        var transferId = UUID.randomUUID();
+        account.debitTransfer(new BigDecimal("200.00"), UUID.randomUUID(), transferId);
+
+        account.failTransfer(new BigDecimal("200.00"), UUID.randomUUID(), transferId, "credit side rejected");
+
+        assertEquals(new BigDecimal("500.00"), account.getBalance());
+    }
+
+    @Test
+    @DisplayName("failTransfer | records exactly one TransferFailed event")
+    void failTransfer_records_one_event() {
+        var account = fundedAccount("300.00");
+        account.debitTransfer(new BigDecimal("100.00"), UUID.randomUUID(), UUID.randomUUID());
+        account.drainDomainEvents();
+
+        account.failTransfer(new BigDecimal("100.00"), UUID.randomUUID(), UUID.randomUUID(), "currency mismatch");
+
+        var changes = account.pullUncommittedChanges();
+        assertEquals(1, changes.size());
+        assertInstanceOf(TransferFailed.class, changes.getFirst());
+    }
+
+    @Test
+    @DisplayName("failTransfer | works on a FROZEN account to allow compensation")
+    void failTransfer_succeeds_on_frozen_account() {
+        var account = fundedAccount("300.00");
+        account.debitTransfer(new BigDecimal("100.00"), UUID.randomUUID(), UUID.randomUUID());
+        account.freeze();
+
+        assertDoesNotThrow(() ->
+                account.failTransfer(new BigDecimal("100.00"), UUID.randomUUID(), UUID.randomUUID(), "receiver frozen"));
+    }
+
+    @Test
+    @DisplayName("failTransfer | throws IllegalArgumentException when amount is zero")
+    void failTransfer_throws_when_amount_is_zero() {
+        assertThrows(IllegalArgumentException.class,
+                () -> activeAccount().failTransfer(BigDecimal.ZERO, UUID.randomUUID(), UUID.randomUUID(), "reason"));
     }
 
     // ── freeze ────────────────────────────────────────────────────────────────

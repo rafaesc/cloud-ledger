@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("JpaDomainEventRepositoryAdapter (integration)")
 class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
@@ -37,7 +38,7 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         var event = new AccountOpened(aggregateId, accountId, "USD");
         event.setVersion(0);
 
-        adapter.save(aggregateId, "account", event, null);
+        adapter.save(aggregateId, "account", event);
 
         List<DomainEvent> events = adapter.findAllByAggregateId(aggregateId);
         assertFalse(events.isEmpty());
@@ -62,8 +63,8 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         var eventB = new AccountOpened(otherAggregateId, accountId, "EUR");
         eventB.setVersion(0);
 
-        adapter.save(aggregateId, "account", eventA, null);
-        adapter.save(otherAggregateId, "account", eventB, null);
+        adapter.save(aggregateId, "account", eventA);
+        adapter.save(otherAggregateId, "account", eventB);
 
         List<DomainEvent> events = adapter.findAllByAggregateId(aggregateId);
         assertEquals(1, events.size());
@@ -83,8 +84,8 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         var deposited = new MoneyDeposited(aggregateId, accountId, new BigDecimal("100.00"));
         deposited.setVersion(1);
 
-        adapter.save(aggregateId, "account", opened, null);
-        adapter.save(aggregateId, "account", deposited, null);
+        adapter.save(aggregateId, "account", opened);
+        adapter.save(aggregateId, "account", deposited);
 
         List<DomainEvent> events = adapter.findAllByAggregateId(aggregateId);
         assertEquals(2, events.size());
@@ -101,7 +102,7 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         var event = new AccountOpened(aggregateId, accountId, "GBP");
         event.setVersion(0);
 
-        adapter.save(aggregateId, "account", event, null);
+        adapter.save(aggregateId, "account", event);
 
         Sort sort = Sort.by(Sort.Direction.ASC, "version");
         List<DomainEventEntity> stored = jpaRepository.findAllByAggregateId(aggregateId, sort);
@@ -111,5 +112,36 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         assertEquals("account", entity.getAggregateType());
         assertEquals("account-opened", entity.getEventName());
         assertNotNull(entity.getPayload());
+    }
+
+    @Test
+    @DisplayName("save | stamps the returned event with the DB-generated sequence_number")
+    void save_stampsSequenceNumberOnEvent() {
+        var aggregateId = UUID.randomUUID();
+        var accountId = UUID.randomUUID();
+
+        var event = new AccountOpened(aggregateId, accountId, "USD");
+        event.setVersion(0);
+
+        var saved = adapter.save(aggregateId, "account", event);
+
+        assertNotNull(saved.getSequenceNumber(), "sequence_number must be populated after save");
+    }
+
+    @Test
+    @DisplayName("save | sequence_numbers are strictly increasing across events")
+    void save_sequenceNumbersAreStrictlyIncreasing() {
+        var accountId = UUID.randomUUID();
+
+        var first = new AccountOpened(UUID.randomUUID(), accountId, "USD");
+        first.setVersion(0);
+        var second = new AccountOpened(UUID.randomUUID(), accountId, "EUR");
+        second.setVersion(0);
+
+        adapter.save(first.getAggregateId(), "account", first);
+        adapter.save(second.getAggregateId(), "account", second);
+
+        assertTrue(second.getSequenceNumber() > first.getSequenceNumber(),
+                "Each event must receive a higher sequence_number than the previous one");
     }
 }

@@ -1,4 +1,17 @@
 spring:
+  cloud:
+    aws:
+      sqs:
+        queue-url: ${SQS_QUEUE_URL}
+      region: ${AWS_REGION:us-east-1}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: true
+
   datasource:
     url: jdbc:aws-wrapper:postgresql://${DB_CLUSTER_ENDPOINT}/${DB_NAME}
     username: ${DB_USERNAME}
