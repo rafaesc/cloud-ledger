@@ -1,0 +1,65 @@
+package com.getcloudledger.api.shared.domain.bus.event;
+
+import com.getcloudledger.api.shared.domain.Utils;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.UUID;
+
+import static java.time.ZoneOffset.UTC;
+
+public abstract class BaseEvent {
+
+    @Getter
+    private UUID aggregateId;
+    @Getter
+    private UUID accountId;
+    @Getter
+    private UUID eventId;
+    @Getter
+    @Setter
+    private String occurredOn;
+    @Getter
+    @Setter
+    private Integer version;
+
+    protected BaseEvent(UUID aggregateId, UUID accountId) {
+        this.aggregateId = aggregateId;
+        this.accountId = accountId;
+        this.eventId = UUID.randomUUID();
+        this.occurredOn = Utils.dateToString(LocalDateTime.now(UTC));
+        this.version = -1;
+    }
+
+    protected BaseEvent(
+            UUID aggregateId,
+            UUID accountId,
+            UUID eventId,
+            String occurredOn,
+            Integer version) {
+        this.aggregateId = aggregateId;
+        this.accountId = accountId;
+        this.eventId = eventId;
+        this.occurredOn = occurredOn;
+        this.version = version;
+    }
+
+    protected BaseEvent() {
+    }
+
+    public HashMap<String, Object> toPrimitives() {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    public BaseEvent fromPrimitives(
+            UUID aggregateId,
+            UUID accountId,
+            HashMap<String, Object> body,
+            UUID eventId,
+            String occurredOn,
+            Integer version) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+}

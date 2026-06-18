@@ -1,3 +1,30 @@
 spring:
   application:
     name: api
+
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    schemas: cloudledger
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        default_schema: cloudledger
+    show-sql: false
+
+  datasource:
+    url: jdbc:aws-wrapper:postgresql://localhost:7001/cloudledger
+    username: admin
+    password: secret123
+    driver-class-name: software.amazon.jdbc.Driver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

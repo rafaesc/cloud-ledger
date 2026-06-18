@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    driver-class-name: software.amazon.jdbc.Driver
+    hikari:
+      exception-override-class-name: software.amazon.jdbc.util.HikariCPSQLException
+      max-lifetime: 1260000
+      auto-commit: false
+      maximum-pool-size: 3

@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:aws-wrapper:postgresql://${DB_CLUSTER_ENDPOINT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    hikari:
+      data-source-properties:
+        wrapperPlugins: failover,efm2,iam
+        wrapperDialect: aurora-pg
+      exception-override-class-name: software.amazon.jdbc.util.HikariCPSQLException
