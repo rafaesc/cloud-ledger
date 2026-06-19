@@ -8,7 +8,8 @@ services:
       - "7001-7099:7001-7099"   # RDS proxy ports
       - "7379-7399:6379-6399"   # ElastiCache proxy ports
     environment:
-      SERVICES: "sqs,dynamodb,lambda,iam,logs"
+      SERVICES: "sqs,dynamodb,lambda,iam,logs,ecr"
+      FLOCI_SERVICES_ECR_URI_STYLE: "path"
       FLOCI_SERVICES_DOCKER_NETWORK: "getcloudledger"
       FLOCI_SERVICES_RDS_PROXY_BASE_PORT: "7001"
       FLOCI_SERVICES_SCHEDULER_ENABLED: true
