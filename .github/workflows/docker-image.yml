@@ -1,0 +1,113 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-healthcheck:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Floci
+        run: docker compose up -d
+
+      - name: Wait for Floci to be ready
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4566/_floci/health 2>/dev/null || \
+               curl -sf http://localhost:4566/health 2>/dev/null || \
+               nc -z localhost 4566 2>/dev/null; then
+              echo "Floci is ready"
+              break
+            fi
+            echo "Waiting for Floci... ($i)"
+            sleep 3
+          done
+
+      - name: Provision AWS resources
+        run: |
+          aws rds create-db-instance \
+            --db-instance-identifier cloudledger-postgres \
+            --db-instance-class db.t3.micro \
+            --engine postgres \
+            --master-username admin \
+            --master-user-password secret123 \
+            --allocated-storage 20 \
+            --endpoint-url $AWS_ENDPOINT_URL
+
+          aws sqs create-queue \
+            --queue-name orders \
+            --endpoint-url $AWS_ENDPOINT_URL
+
+          aws elasticache create-replication-group \
+            --replication-group-id my-cache \
+            --replication-group-description "Dev cache" \
+            --endpoint-url $AWS_ENDPOINT_URL
+
+      - name: Wait for RDS proxy port
+        run: |
+          for i in $(seq 1 30); do
+            if nc -z localhost 7001; then
+              echo "RDS proxy is up on :7001"
+              break
+            fi
+            echo "Waiting for RDS proxy... ($i)"
+            sleep 3
+          done
+
+      - name: Create cloudledger database
+        run: |
+          PGPASSWORD=secret123 psql -h localhost -p 7001 -U admin -tc \
+            "SELECT 1 FROM pg_database WHERE datname='cloudledger'" postgres \
+            | grep -q 1 || \
+          PGPASSWORD=secret123 psql -h localhost -p 7001 -U admin \
+            -c "CREATE DATABASE cloudledger;" postgres
+
+      - name: Build Docker image
+        run: docker build -t cloud-ledger-api-test ./api
+
+      - name: Run API container
+        run: |
+          docker run -d \
+            --network host \
+            -e SPRING_DATA_REDIS_PORT=7379 \
+            --name cl-test \
+            cloud-ledger-api-test \
+            java \
+              -XX:+UseContainerSupport \
+              -XX:MaxRAMPercentage=75.0 \
+              -XX:+UseG1GC \
+              -XX:+UseStringDeduplication \
+              -Djava.security.egd=file:/dev/./urandom \
+              -jar /app/app.jar
+
+      - name: Wait for /actuator/health
+        run: |
+          for i in $(seq 1 40); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP 200)"
+              curl -s http://localhost:8080/actuator/health | python3 -m json.tool
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — waiting..."
+            sleep 5
+          done
+          echo "App did not become healthy in time"
+          docker logs cl-test
+          exit 1
+
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs cl-test 2>&1 || true
