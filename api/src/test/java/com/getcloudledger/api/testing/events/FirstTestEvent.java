@@ -18,7 +18,7 @@ public class FirstTestEvent extends DomainEvent {
     }
 
     public static String eventName() {
-        return "test-first-event";
+        return "FirstTestEvent";
     }
 
     @Override

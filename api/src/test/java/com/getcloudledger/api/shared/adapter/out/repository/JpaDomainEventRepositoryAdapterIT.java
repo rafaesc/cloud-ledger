@@ -110,7 +110,7 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
 
         var entity = stored.getFirst();
         assertEquals("account", entity.getAggregateType());
-        assertEquals("account-opened", entity.getEventName());
+        assertEquals("AccountOpened", entity.getEventName());
         assertNotNull(entity.getPayload());
     }
 

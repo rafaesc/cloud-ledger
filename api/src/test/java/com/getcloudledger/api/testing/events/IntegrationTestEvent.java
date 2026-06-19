@@ -22,7 +22,7 @@ public class IntegrationTestEvent extends IntegrationEvent {
     }
 
     public static String eventName() {
-        return "test-integration-event";
+        return "IntegrationTestEvent";
     }
 
     @Override

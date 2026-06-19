@@ -27,7 +27,7 @@ public class SecondTestEvent extends DomainEvent {
     }
 
     public static String eventName() {
-        return "test-second-event";
+        return "SecondTestEvent";
     }
 
     @Override

@@ -77,8 +77,8 @@ class TransferControllerIT {
         var sourceEvents = jpaDomainEventRepository.findAllByAggregateId(sourceId, Sort.by("version"));
         var destEvents = jpaDomainEventRepository.findAllByAggregateId(destinationId, Sort.by("version"));
 
-        assertEquals("transfer-debited", sourceEvents.getLast().getEventName());
-        assertEquals("transfer-credited", destEvents.getLast().getEventName());
+        assertEquals("TransferDebited", sourceEvents.getLast().getEventName());
+        assertEquals("TransferCredited", destEvents.getLast().getEventName());
     }
 
     @Test

@@ -28,7 +28,7 @@ public class MoneyDeposited extends DomainEvent implements BalanceAware {
     }
 
     public static String eventName() {
-        return "money-deposited";
+        return "MoneyDeposited";
     }
 
     @Override

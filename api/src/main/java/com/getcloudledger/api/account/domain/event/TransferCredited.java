@@ -36,7 +36,7 @@ public class TransferCredited extends DomainEvent implements BalanceAware {
     }
 
     public static String eventName() {
-        return "transfer-credited";
+        return "TransferCredited";
     }
 
     @Override

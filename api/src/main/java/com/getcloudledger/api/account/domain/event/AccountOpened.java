@@ -27,7 +27,7 @@ public class AccountOpened extends DomainEvent {
     }
 
     public static String eventName() {
-        return "account-opened";
+        return "AccountOpened";
     }
 
     @Override

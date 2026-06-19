@@ -22,7 +22,7 @@ public class AccountFrozen extends DomainEvent {
     }
 
     public static String eventName() {
-        return "account-frozen";
+        return "AccountFrozen";
     }
 
     @Override

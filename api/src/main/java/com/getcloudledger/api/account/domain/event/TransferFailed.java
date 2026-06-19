@@ -39,7 +39,7 @@ public class TransferFailed extends DomainEvent implements BalanceAware {
     }
 
     public static String eventName() {
-        return "transfer-failed";
+        return "TransferFailed";
     }
 
     @Override

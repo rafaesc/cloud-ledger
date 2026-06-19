@@ -23,7 +23,7 @@ public class AccountClosed extends DomainEvent implements DeactivationDomainEven
     }
 
     public static String eventName() {
-        return "account-closed";
+        return "AccountClosed";
     }
 
     @Override

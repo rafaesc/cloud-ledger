@@ -70,7 +70,7 @@ class AccountControllerIT {
 
         var events = jpaDomainEventRepository.findAllByAggregateId(accountId, Sort.by("version"));
         assertEquals(1, events.size());
-        assertEquals("account-opened", events.getFirst().getEventName());
+        assertEquals("AccountOpened", events.getFirst().getEventName());
         assertEquals(accountId, events.getFirst().getAggregateId());
     }
 
