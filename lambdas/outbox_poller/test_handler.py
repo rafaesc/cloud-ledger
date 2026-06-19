@@ -24,7 +24,7 @@ def env_vars(monkeypatch: pytest.MonkeyPatch):
 @mock_aws
 @patch("outbox_poller.handler.get_connection")
 def test_publishes_unpublished_events_to_sqs(mock_get_conn: MagicMock, monkeypatch: pytest.MonkeyPatch):
-    sqs: SQSClient = boto3.client("sqs", region_name="us-east-1")
+    sqs: SQSClient = boto3.client("sqs", region_name="us-east-1") # pyright: ignore[reportUnknownMemberType]
     queue_url = sqs.create_queue(QueueName="outbox.fifo", Attributes={"FifoQueue": "True"})["QueueUrl"]
     monkeypatch.setenv("SQS_QUEUE_URL", queue_url)
 
@@ -54,7 +54,7 @@ def test_publishes_unpublished_events_to_sqs(mock_get_conn: MagicMock, monkeypat
 @mock_aws
 @patch("outbox_poller.handler.get_connection")
 def test_returns_zero_when_no_unpublished_events (mock_get_conn: MagicMock, monkeypatch: pytest.MonkeyPatch):
-    sqs: SQSClient = boto3.client("sqs", region_name="us-east-1")
+    sqs: SQSClient = boto3.client("sqs", region_name="us-east-1") # pyright: ignore[reportUnknownMemberType]
     queue_url = sqs.create_queue(QueueName="outbox.fifo", Attributes={"FifoQueue": "True"})["QueueUrl"]
     monkeypatch.setenv("SQS_QUEUE_URL", queue_url)
 

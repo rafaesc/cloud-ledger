@@ -1,0 +1,49 @@
+name: Outbox Poller
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'lambdas/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'lambdas/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          working-directory: lambdas
+
+      - name: Install dependencies
+        run: uv sync --group dev
+        working-directory: lambdas
+
+      - name: Lint
+        run: uv run ruff check .
+        working-directory: lambdas
+
+      - name: Run tests
+        run: uv run pytest --tb=short
+        working-directory: lambdas
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build outbox-poller image
+        run: |
+          docker build \
+            -t cloudledger/outbox-poller:${{ github.sha }} \
+            -f outbox_poller/Dockerfile \
+            .
+        working-directory: lambdas
