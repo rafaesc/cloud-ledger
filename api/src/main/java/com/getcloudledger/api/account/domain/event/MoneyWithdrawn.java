@@ -16,14 +16,14 @@ public class MoneyWithdrawn extends DomainEvent implements BalanceAware {
 
     private BigDecimal amount;
 
-    public MoneyWithdrawn(UUID aggregateId, UUID accountId, BigDecimal amount) {
-        super(aggregateId, accountId);
+    public MoneyWithdrawn(UUID aggregateId, UUID userId, BigDecimal amount) {
+        super(aggregateId, userId);
         this.amount = amount;
     }
 
-    public MoneyWithdrawn(UUID aggregateId, UUID accountId, UUID eventId, String occurredOn,
+    public MoneyWithdrawn(UUID aggregateId, UUID userId, UUID eventId, String occurredOn,
                           Integer version, BigDecimal amount) {
-        super(aggregateId, accountId, eventId, occurredOn, version);
+        super(aggregateId, userId, eventId, occurredOn, version);
         this.amount = amount;
     }
 
@@ -44,10 +44,10 @@ public class MoneyWithdrawn extends DomainEvent implements BalanceAware {
     }
 
     @Override
-    public MoneyWithdrawn fromPrimitives(UUID aggregateId, UUID accountId, HashMap<String, Object> body,
+    public MoneyWithdrawn fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
                                          UUID eventId, String occurredOn, Integer version) {
         return new MoneyWithdrawn(
-                aggregateId, accountId, eventId, occurredOn, version,
+                aggregateId, userId, eventId, occurredOn, version,
                 new BigDecimal((String) body.get("amount")));
     }
 }

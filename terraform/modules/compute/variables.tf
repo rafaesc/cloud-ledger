@@ -54,3 +54,14 @@ variable "sqs_endpoint_url" {
   description = "SQS endpoint URL — overridden in local to point at Floci"
   type        = string
 }
+
+variable "dynamodb_table_name" {
+  description = "DynamoDB projections table name, from the storage module"
+  type        = string
+}
+
+variable "dynamodb_endpoint_url" {
+  description = "DynamoDB endpoint URL — overridden in local to point at Floci"
+  type        = string
+  default     = ""
+}

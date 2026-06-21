@@ -8,7 +8,8 @@ export AWS_SECRET_ACCESS_KEY=test
 export AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT_URL=http://localhost:4566
 
-REPO=localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller
+OUTBOX_REPO=localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller
+PROJECTOR_REPO=localhost:5100/000000000000/us-east-1/cloudledger/projector
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -26,12 +27,21 @@ aws ecr get-login-password --endpoint-url "$AWS_ENDPOINT_URL" \
 
 echo "==> Building outbox-poller image..."
 docker build \
-  -t "$REPO:latest" \
+  -t "$OUTBOX_REPO:latest" \
   -f "$REPO_ROOT/lambdas/outbox_poller/Dockerfile" \
   "$REPO_ROOT/lambdas"
 
-echo "==> Pushing image to Floci ECR..."
-docker push "$REPO:latest"
+echo "==> Pushing outbox-poller image to Floci ECR..."
+docker push "$OUTBOX_REPO:latest"
+
+echo "==> Building projector image..."
+docker build \
+  -t "$PROJECTOR_REPO:latest" \
+  -f "$REPO_ROOT/lambdas/projector/Dockerfile" \
+  "$REPO_ROOT/lambdas"
+
+echo "==> Pushing projector image to Floci ECR..."
+docker push "$PROJECTOR_REPO:latest"
 
 echo ""
 echo "Bootstrap complete. Run the API once to initialise Flyway migrations:"

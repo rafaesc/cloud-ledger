@@ -6,6 +6,12 @@ resource "aws_ecr_repository" "main" {
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
 
+resource "aws_ecr_repository" "projector" {
+  name = "cloudledger/projector"
+
+  tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
 # ── IAM — Lambda ─────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "lambda" {
@@ -47,6 +53,20 @@ resource "aws_iam_role_policy" "lambda_sqs" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  name = "dynamodb-access"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+      Resource = "*"
+    }]
+  })
+}
+
 # ── Lambda ───────────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "main" {
@@ -73,6 +93,35 @@ resource "aws_lambda_function" "main" {
   }
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
+# ── Lambda — projector ───────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "projector" {
+  function_name = "projector"
+  role          = aws_iam_role.lambda.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.projector.repository_url}:latest"
+
+  environment {
+    variables = merge(
+      { DYNAMODB_TABLE = var.dynamodb_table_name },
+      var.dynamodb_endpoint_url != "" ? { DYNAMODB_ENDPOINT_URL = var.dynamodb_endpoint_url } : {}
+    )
+  }
+
+  vpc_config {
+    subnet_ids         = var.subnet_ids
+    security_group_ids = [var.lambda_sg_id]
+  }
+
+  tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
+resource "aws_lambda_event_source_mapping" "sqs_to_projector" {
+  event_source_arn = var.queue_arn
+  function_name    = aws_lambda_function.projector.arn
+  batch_size       = 10
 }
 
 # ── IAM — Scheduler ──────────────────────────────────────────────────────────

@@ -14,12 +14,12 @@ import java.util.UUID;
 @NoArgsConstructor
 public class AccountClosed extends DomainEvent implements DeactivationDomainEvent {
 
-    public AccountClosed(UUID aggregateId, UUID accountId) {
-        super(aggregateId, accountId);
+    public AccountClosed(UUID aggregateId, UUID userId) {
+        super(aggregateId, userId);
     }
 
-    public AccountClosed(UUID aggregateId, UUID accountId, UUID eventId, String occurredOn, Integer version) {
-        super(aggregateId, accountId, eventId, occurredOn, version);
+    public AccountClosed(UUID aggregateId, UUID userId, UUID eventId, String occurredOn, Integer version) {
+        super(aggregateId, userId, eventId, occurredOn, version);
     }
 
     public static String eventName() {
@@ -37,8 +37,8 @@ public class AccountClosed extends DomainEvent implements DeactivationDomainEven
     }
 
     @Override
-    public AccountClosed fromPrimitives(UUID aggregateId, UUID accountId, HashMap<String, Object> body,
+    public AccountClosed fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
                                         UUID eventId, String occurredOn, Integer version) {
-        return new AccountClosed(aggregateId, accountId, eventId, occurredOn, version);
+        return new AccountClosed(aggregateId, userId, eventId, occurredOn, version);
     }
 }

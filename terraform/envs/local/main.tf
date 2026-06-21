@@ -47,14 +47,16 @@ module "storage" {
 module "compute" {
   source = "../../modules/compute"
 
-  env              = "local"
-  subnet_ids       = module.networking.private_subnet_ids
-  lambda_sg_id     = module.networking.lambda_sg_id
-  queue_url        = module.messaging.queue_url
-  queue_arn        = module.messaging.queue_arn
-  db_host          = "floci-rds-cloudledger-postgres"
-  db_name          = module.storage.db_name
-  db_user          = "admin"
-  db_password      = "secret123"
-  sqs_endpoint_url = "http://floci:4566"
+  env                   = "local"
+  subnet_ids            = module.networking.private_subnet_ids
+  lambda_sg_id          = module.networking.lambda_sg_id
+  queue_url             = module.messaging.queue_url
+  queue_arn             = module.messaging.queue_arn
+  db_host               = "floci-rds-cloudledger-postgres"
+  db_name               = module.storage.db_name
+  db_user               = "admin"
+  db_password           = "secret123"
+  sqs_endpoint_url      = "http://floci:4566"
+  dynamodb_table_name   = module.storage.dynamodb_table_name
+  dynamodb_endpoint_url = "http://floci:4566"
 }

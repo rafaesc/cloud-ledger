@@ -38,7 +38,7 @@ public class EventJsonDeserializer {
         return (T) fromPrimitivesMethod.invoke(
                 nullInstance,
                 UUID.fromString((String) attributes.get("aggregate_id")),
-                UUID.fromString((String) attributes.get("account_id")),
+                UUID.fromString((String) attributes.get("user_id")),
                 attributes,
                 UUID.fromString((String) data.get("event_id")),
                 (String) data.get("occurred_on"),
@@ -47,7 +47,7 @@ public class EventJsonDeserializer {
 
     public <T extends BaseEvent> T deserializePrimitives(
             String eventId,
-            String accountId,
+            String userId,
             String aggregateId,
             String eventName,
             String occurredOn,
@@ -72,7 +72,7 @@ public class EventJsonDeserializer {
         return (T) fromPrimitivesMethod.invoke(
                 nullInstance,
                 UUID.fromString(aggregateId),
-                UUID.fromString(accountId),
+                UUID.fromString(userId),
                 attributes,
                 UUID.fromString(eventId),
                 occurredOn,

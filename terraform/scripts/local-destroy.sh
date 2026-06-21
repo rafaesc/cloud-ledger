@@ -17,6 +17,10 @@ terraform destroy -input=false -auto-approve
 echo "==> Stopping Floci..."
 docker compose -f "$REPO_ROOT/docker-compose.yml" down
 
+echo "==> Removing Floci ECR sidecar and its data volume..."
+docker rm -f floci-ecr-registry 2>/dev/null || true
+docker volume rm floci-ecr-registry-data 2>/dev/null || true
+
 echo "==> Wiping Floci persistent state..."
 rm -rf "$REPO_ROOT/data"
 

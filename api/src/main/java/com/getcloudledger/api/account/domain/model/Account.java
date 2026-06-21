@@ -85,7 +85,7 @@ public class Account extends AggregateRoot<AccountId> {
 
     public void apply(AccountOpened event) {
         setId(new AccountId(event.getAggregateId()));
-        this.userId = event.getAccountId();
+        this.userId = event.getUserId();
         this.currency = event.getCurrency();
         this.status = AccountStatus.ACTIVE;
         this.balance = BigDecimal.ZERO;

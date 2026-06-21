@@ -15,14 +15,14 @@ public class AccountOpened extends DomainEvent {
 
     private String currency;
 
-    public AccountOpened(UUID aggregateId, UUID accountId, String currency) {
-        super(aggregateId, accountId);
+    public AccountOpened(UUID aggregateId, UUID userId, String currency) {
+        super(aggregateId, userId);
         this.currency = currency;
     }
 
-    public AccountOpened(UUID aggregateId, UUID accountId, UUID eventId, String occurredOn,
+    public AccountOpened(UUID aggregateId, UUID userId, UUID eventId, String occurredOn,
                          Integer version, String currency) {
-        super(aggregateId, accountId, eventId, occurredOn, version);
+        super(aggregateId, userId, eventId, occurredOn, version);
         this.currency = currency;
     }
 
@@ -43,10 +43,10 @@ public class AccountOpened extends DomainEvent {
     }
 
     @Override
-    public AccountOpened fromPrimitives(UUID aggregateId, UUID accountId, HashMap<String, Object> body,
+    public AccountOpened fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
                                         UUID eventId, String occurredOn, Integer version) {
         return new AccountOpened(
-                aggregateId, accountId, eventId, occurredOn, version,
+                aggregateId, userId, eventId, occurredOn, version,
                 (String) body.get("currency"));
     }
 }

@@ -31,7 +31,7 @@ class EventJsonDeserializerTest {
         assertInstanceOf(SecondTestEvent.class, result);
         var reconstructed = (SecondTestEvent) result;
         assertEquals(original.getAggregateId(), reconstructed.getAggregateId());
-        assertEquals(original.getAccountId(), reconstructed.getAccountId());
+        assertEquals(original.getUserId(), reconstructed.getUserId());
         assertEquals(original.getEventId(), reconstructed.getEventId());
         assertEquals(original.getOccurredOn(), reconstructed.getOccurredOn());
         assertEquals(original.getValueObject(), reconstructed.getValueObject());
@@ -47,7 +47,7 @@ class EventJsonDeserializerTest {
         HashMap<String, Serializable> attributes = new HashMap<>();
         attributes.put("value_object", original.getValueObject());
         attributes.put("aggregate_id", original.getAggregateId());
-        attributes.put("account_id", original.getAccountId());
+        attributes.put("user_id", original.getUserId());
 
         HashMap<String, Serializable> data = new HashMap<>();
         data.put("event_id", original.getEventId());
@@ -71,7 +71,7 @@ class EventJsonDeserializerTest {
         assertInstanceOf(IntegrationTestEvent.class, result);
         var reconstructed = (IntegrationTestEvent) result;
         assertEquals(original.getAggregateId(), reconstructed.getAggregateId());
-        assertEquals(original.getAccountId(), reconstructed.getAccountId());
+        assertEquals(original.getUserId(), reconstructed.getUserId());
         assertEquals(original.getEventId(), reconstructed.getEventId());
         assertEquals(original.getOccurredOn(), reconstructed.getOccurredOn());
         assertEquals(original.getValueObject(), reconstructed.getValueObject());
@@ -81,7 +81,7 @@ class EventJsonDeserializerTest {
     void deserialize_throws_for_unknown_event_type() {
         HashMap<String, Serializable> attributes = new HashMap<>();
         attributes.put("aggregate_id", "agg-x");
-        attributes.put("account_id", "user-x");
+        attributes.put("user_id", "user-x");
 
         HashMap<String, Serializable> data = new HashMap<>();
         data.put("event_id", "event-x");

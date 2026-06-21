@@ -32,7 +32,7 @@ public class JpaDomainEventRepositoryAdapter<T extends DomainEvent> implements D
                     try {
                         return (T) deserializer.deserializePrimitives(
                                 entity.getEventId().toString(),
-                                entity.getAccountId().toString(),
+                                entity.getUserId().toString(),
                                 entity.getAggregateId().toString(),
                                 entity.getEventName(),
                                 Utils.dateToString(entity.getOccurredOn()),
@@ -49,7 +49,7 @@ public class JpaDomainEventRepositoryAdapter<T extends DomainEvent> implements D
     public T save(UUID aggregateId, String aggregateType, T domainEvent) {
         var entity = new DomainEventEntity();
         entity.setEventId(domainEvent.getEventId());
-        entity.setAccountId(domainEvent.getAccountId());
+        entity.setUserId(domainEvent.getUserId());
         entity.setAggregateId(aggregateId);
         entity.setAggregateType(aggregateType);
         entity.setVersion(domainEvent.getVersion());

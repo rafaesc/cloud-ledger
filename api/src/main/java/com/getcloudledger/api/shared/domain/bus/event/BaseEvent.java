@@ -15,7 +15,7 @@ public abstract class BaseEvent {
     @Getter
     private UUID aggregateId;
     @Getter
-    private UUID accountId;
+    private UUID userId;
     @Getter
     private UUID eventId;
     @Getter
@@ -41,9 +41,9 @@ public abstract class BaseEvent {
         this.dynamicAttributes.put(key, value);
     }
 
-    protected BaseEvent(UUID aggregateId, UUID accountId) {
+    protected BaseEvent(UUID aggregateId, UUID userId) {
         this.aggregateId = aggregateId;
-        this.accountId = accountId;
+        this.userId = userId;
         this.eventId = UUID.randomUUID();
         this.occurredOn = Utils.dateToString(LocalDateTime.now(UTC));
         this.version = -1;
@@ -51,12 +51,12 @@ public abstract class BaseEvent {
 
     protected BaseEvent(
             UUID aggregateId,
-            UUID accountId,
+            UUID userId,
             UUID eventId,
             String occurredOn,
             Integer version) {
         this.aggregateId = aggregateId;
-        this.accountId = accountId;
+        this.userId = userId;
         this.eventId = eventId;
         this.occurredOn = occurredOn;
         this.version = version;
@@ -71,7 +71,7 @@ public abstract class BaseEvent {
 
     public BaseEvent fromPrimitives(
             UUID aggregateId,
-            UUID accountId,
+            UUID userId,
             HashMap<String, Object> body,
             UUID eventId,
             String occurredOn,

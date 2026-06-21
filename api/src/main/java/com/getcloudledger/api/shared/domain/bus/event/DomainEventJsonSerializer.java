@@ -11,7 +11,7 @@ public class DomainEventJsonSerializer {
     public static <T extends DomainEvent> String serialize(T domainEvent) {
         HashMap<String, Object> attributes = domainEvent.toPrimitives();
         attributes.put("aggregate_id", domainEvent.getAggregateId());
-        attributes.put("account_id", domainEvent.getAccountId());
+        attributes.put("user_id", domainEvent.getUserId());
 
         return Utils.toJson(new HashMap<String, Object>() {
             {

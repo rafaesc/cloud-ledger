@@ -34,7 +34,7 @@ class DomainEventJsonSerializerTest {
         assertEquals(event.getOccurredOn(), data.get("occurred_on"));
 
         assertEquals(event.getAggregateId().toString(), attributes.get("aggregate_id"));
-        assertEquals(event.getAccountId().toString(), attributes.get("account_id"));
+        assertEquals(event.getUserId().toString(), attributes.get("user_id"));
     }
 
     @Test

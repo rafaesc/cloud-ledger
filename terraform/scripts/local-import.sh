@@ -41,11 +41,23 @@ try_import "module.storage.aws_dynamodb_table.projections" "cloudledger-projecti
 
 echo "==> Importing compute resources..."
 try_import "module.compute.aws_ecr_repository.main"              "cloudledger/outbox-poller"
+try_import "module.compute.aws_ecr_repository.projector"         "cloudledger/projector"
 try_import "module.compute.aws_iam_role.lambda"                  "cloudledger-local-lambda"
 try_import "module.compute.aws_iam_role.scheduler"               "cloudledger-local-scheduler"
 try_import "module.compute.aws_lambda_function.main"             "outbox-poller"
+try_import "module.compute.aws_lambda_function.projector"        "projector"
 try_import "module.compute.aws_scheduler_schedule_group.main"    "cloudledger-local"
 try_import "module.compute.aws_scheduler_schedule.main"          "cloudledger-local/outbox-poller"
+
+ESM_UUID=$(aws lambda list-event-source-mappings \
+  --function-name projector \
+  --query "EventSourceMappings[0].UUID" \
+  --output text 2>/dev/null || true)
+if [ -n "$ESM_UUID" ] && [ "$ESM_UUID" != "None" ]; then
+  try_import "module.compute.aws_lambda_event_source_mapping.sqs_to_projector" "$ESM_UUID"
+else
+  echo "  skip (not found in Floci): aws_lambda_event_source_mapping sqs_to_projector"
+fi
 
 echo ""
 echo "Import complete. Run 'terraform apply' to reconcile any drift."

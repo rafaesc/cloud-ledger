@@ -47,7 +47,7 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         assertInstanceOf(AccountOpened.class, result);
         var deserialized = (AccountOpened) result;
         assertEquals(aggregateId, deserialized.getAggregateId());
-        assertEquals(accountId, deserialized.getAccountId());
+        assertEquals(accountId, deserialized.getUserId());
         assertEquals("USD", deserialized.getCurrency());
     }
 
