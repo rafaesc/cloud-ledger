@@ -5,59 +5,39 @@ on:
     branches: [master]
     paths:
       - 'api/**'
+      - 'terraform/**'
   pull_request:
     branches: [master]
     paths:
       - 'api/**'
+      - 'terraform/**'
 
 jobs:
   build-and-healthcheck:
     runs-on: ubuntu-latest
 
     env:
-      AWS_ENDPOINT_URL: http://localhost:4566
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
 
     steps:
       - uses: actions/checkout@v4
 
+      - uses: hashicorp/setup-terraform@v3
+
       - name: Start Floci
-        run: docker compose up -d
+        run: docker compose up -d --wait
 
-      - name: Wait for Floci to be ready
+      - name: Provision infrastructure
+        working-directory: terraform/envs/local
         run: |
-          for i in $(seq 1 20); do
-            if curl -sf http://localhost:4566/_floci/health 2>/dev/null || \
-               curl -sf http://localhost:4566/health 2>/dev/null || \
-               nc -z localhost 4566 2>/dev/null; then
-              echo "Floci is ready"
-              break
-            fi
-            echo "Waiting for Floci... ($i)"
-            sleep 3
-          done
-
-      - name: Provision AWS resources
-        run: |
-          aws rds create-db-instance \
-            --db-instance-identifier cloudledger-postgres \
-            --db-instance-class db.t3.micro \
-            --engine postgres \
-            --master-username admin \
-            --master-user-password secret123 \
-            --allocated-storage 20 \
-            --endpoint-url $AWS_ENDPOINT_URL
-
-          aws sqs create-queue \
-            --queue-name orders \
-            --endpoint-url $AWS_ENDPOINT_URL
-
-          aws elasticache create-replication-group \
-            --replication-group-id my-cache \
-            --replication-group-description "Dev cache" \
-            --endpoint-url $AWS_ENDPOINT_URL
+          terraform init -input=false
+          terraform apply -input=false -auto-approve \
+            -target=module.networking \
+            -target=module.messaging \
+            -target=module.storage
 
       - name: Wait for RDS proxy port
         run: |
@@ -70,15 +50,7 @@ jobs:
             sleep 3
           done
 
-      - name: Create cloudledger database
-        run: |
-          PGPASSWORD=secret123 psql -h localhost -p 7001 -U admin -tc \
-            "SELECT 1 FROM pg_database WHERE datname='cloudledger'" postgres \
-            | grep -q 1 || \
-          PGPASSWORD=secret123 psql -h localhost -p 7001 -U admin \
-            -c "CREATE DATABASE cloudledger;" postgres
-
-      - name: Build Docker image
+      - name: Build API image
         run: docker build -t cloud-ledger-api-test ./api
 
       - name: Run API container
@@ -99,7 +71,8 @@ jobs:
       - name: Wait for /actuator/health
         run: |
           for i in $(seq 1 40); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:8080/actuator/health 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed (HTTP 200)"
               curl -s http://localhost:8080/actuator/health | python3 -m json.tool

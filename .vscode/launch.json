@@ -6,7 +6,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "mainClass": "com.getcloudledger.api.ApiApplication",
-            "projectName": "java",
+            "projectName": "api",
             "args": "-Dspring.output.ansi.enabled=ALWAYS",
             "envFile": "${workspaceFolder}/.env"
         }

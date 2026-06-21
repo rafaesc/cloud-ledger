@@ -26,7 +26,6 @@ replay_pid*
 .idea/
 
 CLAUDE.md
-terraform/
 
 # Python
 __pycache__/
@@ -41,3 +40,14 @@ build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
