@@ -36,12 +36,10 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
                 logger.info("No unpublished events found")
                 return {"published": 0}
 
-            for event_id, payload in rows:
+            for payload in rows:
                 sqs.send_message(
                     QueueUrl=queue_url,
                     MessageBody=json.dumps(payload),
-                    MessageGroupId="outbox",
-                    MessageDeduplicationId=str(event_id),
                 )
 
             event_ids = [str(row[0]) for row in rows]

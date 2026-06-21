@@ -35,10 +35,10 @@ module "messaging" {
 module "storage" {
   source = "../../modules/storage"
 
-  env               = "local"
-  subnet_ids        = module.networking.private_subnet_ids
-  rds_sg_id         = module.networking.rds_sg_id
-  elasticache_sg_id = module.networking.elasticache_sg_id
+  env                              = "local"
+  subnet_ids                       = module.networking.private_subnet_ids
+  rds_sg_id                        = module.networking.rds_sg_id
+  elasticache_sg_id                = module.networking.elasticache_sg_id
   rds_username                     = "admin"
   rds_password                     = "secret123"
   elasticache_subnet_group_enabled = false
