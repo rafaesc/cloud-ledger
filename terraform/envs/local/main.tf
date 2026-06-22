@@ -53,7 +53,7 @@ module "compute" {
   lambda_sg_id          = module.networking.lambda_sg_id
   queue_url             = module.messaging.queue_url
   queue_arn             = module.messaging.queue_arn
-  db_host               = "floci-rds-cloudledger-postgres"
+  db_host               = "floci-rds-cloudledger-local"
   db_name               = module.storage.db_name
   db_user               = "admin"
   db_password           = "secret123"
@@ -65,5 +65,5 @@ module "compute" {
 module "auth" {
   source = "../../modules/auth"
 
-  env                   = "local"
+  env = "local"
 }

@@ -4,13 +4,13 @@ on:
   push:
     branches: [master]
     paths:
-      - 'api/src/resources/db/**'
+      - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
   pull_request:
     branches: [master]
     paths:
-      - 'api/src/resources/db/**'
+      - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
 
@@ -37,6 +37,10 @@ jobs:
         run: uv run ruff check .
         working-directory: lambdas
 
+      - name: Type check
+        run: uv run mypy .
+        working-directory: lambdas
+
       - name: Run tests
         run: uv run pytest --tb=short
         working-directory: lambdas
@@ -48,12 +52,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Build outbox-poller image
         run: |
           docker build \
             -t ${{ env.IMAGE }}:${{ github.sha }} \
             -t ${{ env.IMAGE }}:latest \
             -f outbox_poller/Dockerfile \
+            .
+        working-directory: lambdas
+
+      - name: Build projector image
+        run: |
+          docker build \
+            -t localhost:5100/000000000000/us-east-1/cloudledger/projector:${{ github.sha }} \
+            -f projector/Dockerfile \
             .
         working-directory: lambdas
 

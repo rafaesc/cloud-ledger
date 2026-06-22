@@ -21,17 +21,17 @@ resource "aws_cognito_resource_server" "api" {
 }
 
 resource "aws_cognito_user_pool_client" "api" {
-    name = "m2m-client"
-    user_pool_id = aws_cognito_user_pool.main.id
-    generate_secret = true
-    allowed_oauth_flows = ["client_credentials"]
-    allowed_oauth_scopes = ["https://api.getcloudledger.com/read", "https://api.getcloudledger.com/write"]
-    allowed_oauth_flows_user_pool_client = true
+  name                                 = "m2m-client"
+  user_pool_id                         = aws_cognito_user_pool.main.id
+  generate_secret                      = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["https://api.getcloudledger.com/read", "https://api.getcloudledger.com/write"]
+  allowed_oauth_flows_user_pool_client = true
 
 }
 
 ## It doesn't require a Cognito domain for Floci
-## Relaxed OAuth token endpoint for grant_type=client_credentials: POST /cognito-idp/oauth2/token
+## Relaxed OAuth token endpoint for grant_type=client_credentials: POST http://localhost:4566/cognito-idp/oauth2/token
 ## Tokens issued by Floci can be validated using the discovery: http://localhost:4566/$POOL_ID/.well-known/openid-configuration
 # resource "aws_cognito_user_pool_domain" "main" {
 #   domain       = "cloudledger-${var.env}"  # becomes cloudledger-dev.auth.us-east-1.amazoncognito.com
