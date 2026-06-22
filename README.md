@@ -2,6 +2,8 @@
 
 **An audit-grade, event-sourced financial ledger API built on AWS — the primitive layer that payment systems are built on top of.**
 
+![Local mirrors cloud](docs/f628d673-32e5-49db-865e-fc08c325aec9.png)
+
 ---
 
 ## What is CloudLedger?
