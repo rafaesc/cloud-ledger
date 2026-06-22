@@ -22,7 +22,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │ CloudLedger                                                         │
 │                                                                     │
 │   Client ──commands──▶  Spring Boot 4.1 API  (ECS Fargate)          │
-│                       │  command handlers · JWT · idempotency       │
+│                       │  command handlers · X-User-Id · idempotency │
 │          ┌────────────┴──────────────┐                              │
 │          │ 1. JDBC                    │ 2. write-through            │
 │          │   (events+outbox, one tx)  │    {balance, 30 min TTL}    │
@@ -55,7 +55,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Write ordering (ADR-012):** within a command, the API (1) commits `events + outbox` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is fresh before the async fan-out. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache or projection — sufficient-funds validation always rehydrates the aggregate from the Aurora event store (no double-spend, no bypass of the version fence).
+**Write ordering:** within a command, the API (1) commits `events + outbox` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
 
 ---
 
@@ -64,8 +64,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 | Decision | Choice | Why |
 |---|---|---|
 | Event store | Aurora PostgreSQL (ACID) | Optimistic lock + event insert must be one atomic transaction |
-| Read model | DynamoDB + Redis | Sub-10ms balance reads; Redis hot path, DynamoDB for cache misses |
-| Read-your-writes | Command-path Redis write-through (version-CAS) | `GET /balance` reflects the caller's just-committed transfer with no CQRS lag window; projector backstop covers the Redis-down case (ADR-012) |
+| Read model | DynamoDB + Redis | Sub-10ms balance reads; Redis hot path (30 min TTL), DynamoDB for durable projection |
 | Event fan-out | Transactional Outbox → SQS | Guarantees publication even if the API crashes after Aurora commit |
 | Concurrency control | Optimistic locking (version counter) | No distributed locks; contention surfaces as a 409, not silent data corruption |
 | Idempotency | Per-request UUID key stored in Aurora | Safe client retries; same key always returns the same response |
@@ -74,42 +73,49 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 
 ## Quick Start (Local)
 
-**Prerequisites:** Java 21, Docker Desktop, AWS CLI (for cloud deploy)
+**Prerequisites:** Java 21, Docker, Terraform, Python 3.12 + `uv`
 
 ```bash
-# Start local dependencies (PostgreSQL + Redis + LocalStack for SQS/DynamoDB)
+# Start local infrastructure (Floci: SQS, DynamoDB, Lambda, RDS proxy)
 docker compose up -d
 
-# Run database migrations
-./mvnw flyway:migrate
+# Full setup: apply Terraform, run DB migrations, build and push Lambda images
+bash terraform/scripts/local-bootstrap.sh
 
 # Run the API
-./mvnw spring-boot:run
+cd api && ./gradlew bootRun
 
-# Run unit + integration tests
-./mvnw verify
+# Run API tests
+cd api && ./gradlew test
+
+# Run Lambda tests
+cd lambdas && uv run pytest
 ```
+
+> **Flyway migrations** are disabled at Spring Boot startup. The bootstrap script runs them via `./gradlew flywayMigrate`. To run migrations manually:
+> ```bash
+> cd api && ./gradlew flywayMigrate \
+>   -Pflyway.url="jdbc:postgresql://localhost:7001/cloudledger" \
+>   -Pflyway.user=admin \
+>   -Pflyway.password=secret123
+> ```
 
 ---
 
 ## Key Endpoints
 
-> All writes require `Idempotency-Key: <uuid-v4>` header.
+> All write endpoints require `Idempotency-Key: <uuid-v4>` and `X-User-Id: <uuid>` headers.
 
-| Method | Path | Intent |
+| Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/accounts` | Open a new account |
-| `POST` | `/v1/accounts/{accountId}/deposits` | Deposit funds into an account |
-| `POST` | `/v1/accounts/{accountId}/withdrawals` | Withdraw funds from an account |
-| `POST` | `/v1/transfers` | Transfer funds between two accounts |
+| `POST` | `/v1/accounts` | Open a new account — body: `{accountId, currency}` |
+| `POST` | `/v1/accounts/{accountId}/deposits` | Deposit funds — body: `{amount}` |
+| `POST` | `/v1/accounts/{accountId}/withdrawals` | Withdraw funds — body: `{amount}` |
+| `POST` | `/v1/transfers` | Transfer between accounts — body: `{sourceAccountId, destinationAccountId, amount, transferId}` |
 | `POST` | `/v1/accounts/{accountId}/freeze` | Freeze an account |
 | `POST` | `/v1/accounts/{accountId}/close` | Close an account |
-| `GET` | `/v1/accounts/{accountId}` | Get account metadata and status |
-| `GET` | `/v1/accounts/{accountId}/balance` | Get current balance (Redis hot path w/ command-path write-through for read-your-writes, DynamoDB fallback) |
-| `GET` | `/v1/accounts/{accountId}/transactions` | Paginated transaction history (newest-first, cursor-based) |
-| `GET` | `/v1/accounts?owner_id={ownerId}` | List all accounts belonging to an owner |
 
-Full request/response schemas, error codes, and the OpenAPI 3.1 stub are in [`docs/api-design.md`](docs/api-design.md).
+> Read endpoints (`GET /balance`, `GET /transactions`, etc.) are planned but not yet implemented.
 
 ---
 
@@ -117,21 +123,29 @@ Full request/response schemas, error codes, and the OpenAPI 3.1 stub are in [`do
 
 ```
 cloud-ledger/
-├── src/main/java/com/cloudledger/
-│   ├── presentation/        # REST controllers, filters (JWT, idempotency, rate limit)
-│   ├── application/         # command handlers, query handlers
-│   ├── domain/              # Account aggregate, events, TransferPolicy
-│   └── infrastructure/      # Aurora, DynamoDB, Redis, SQS repositories
-├── src/test/
-│   ├── unit/                # pure domain logic, no I/O
-│   └── integration/         # Testcontainers (PostgreSQL, Redis) + LocalStack (SQS, DynamoDB)
-├── terraform/               # all AWS infrastructure as code
-├── docs/
-│   ├── cloud-ledger.md      # full reference architecture + ADRs
-│   ├── cloud-ledger-tier1.md # build plan (Tier-1 MVP)
-│   ├── api-design.md        # HTTP contract + OpenAPI stub
-│   ├── dynamodb-schema.md   # DynamoDB single-table design
-│   └── domain-model.md      # domain model (aggregates, events, commands)
+├── api/                        # Spring Boot 4.1 / Java 21 (ECS Fargate)
+│   └── src/main/java/com/getcloudledger/api/
+│       ├── account/
+│       │   ├── adapter/in/web/     # REST controllers, request DTOs
+│       │   ├── adapter/out/cache/  # Redis BalanceCache adapter
+│       │   ├── application/        # Command + CommandHandler per use case
+│       │   └── domain/             # Account aggregate, events, TransferPolicy
+│       └── shared/                 # EventBus, CommandBus, EventStore, JPA entities
+├── lambdas/                    # Python 3.12 (uv-managed)
+│   ├── shared/                 # db.py, sqs.py, dynamo.py connection factories
+│   ├── outbox_poller/          # polls outbox → SQS relay
+│   └── projector/              # SQS consumer → DynamoDB writer
+├── terraform/
+│   ├── envs/local/             # Floci-backed local environment (entry point)
+│   ├── modules/
+│   │   ├── networking/         # VPC, subnets, security groups
+│   │   ├── messaging/          # SQS queue (cloudledger-events)
+│   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
+│   │   └── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler
+│   └── scripts/
+│       ├── local-bootstrap.sh  # full setup from scratch
+│       ├── local-destroy.sh    # full teardown
+│       └── local-import.sh     # recover orphaned resources into Terraform state
 └── README.md
 ```
 
@@ -139,15 +153,13 @@ cloud-ledger/
 
 ## The Three Demo Scenarios
 
-These are the strongest live demonstrations of the system's correctness guarantees:
+These demonstrate the system's core correctness guarantees:
 
 **1. Idempotency demo**
-Make a deposit with an `Idempotency-Key`. Replay the exact same request with the same key. The API returns the original `201` response with the original body — no second debit, no second event written to Aurora. Proves that client retries (after timeouts or network drops) are safe by design.
+Make a deposit with an `Idempotency-Key`. Replay the exact same request with the same key. The API returns the original `201` response — no second debit, no second event written to Aurora. Proves that client retries after timeouts or network drops are safe by design.
 
 **2. Concurrent conflict demo**
-Fire two transfers from the same account simultaneously. One lands first and advances the account version. The second receives `409 Conflict` with the current version in the response body. The client re-reads, retries with the updated version, and the transfer succeeds. Final balance is exactly correct — money is neither lost nor created.
+Fire two transfers from the same account simultaneously. One lands first and advances the account version. The second receives `409 Conflict`. The client re-reads, retries with the updated version, and the transfer succeeds. Final balance is exactly correct — money is neither lost nor created.
 
-**3. CQRS projection lag + read-your-writes demo**
-Issue a transfer. The command returns immediately after the Aurora commit and write-throughs the new balance to Redis under a version-CAS, so a `GET /balance` fired right away is already correct (read-your-writes, ADR-012). Within ~2 seconds the outbox poller publishes to SQS and the Lambda projector updates the durable DynamoDB projection. The `X-Projection-Lag-Ms` response header surfaces the measured lag in real time — ≈0 on a write-through hit, rising only when Redis is down and the read falls back to the projector-populated value.
-
-> The event contract between `api` and `projector` is the JSON payload published to SQS, defined in `docs/domain-model.md`. Each service owns its own types locally.
+**3. Async CQRS projection demo**
+Issue a transfer. The command commits to Aurora and immediately write-throughs the new balance to Redis. Within ~5 seconds (configurable EventBridge tick), the outbox poller publishes to SQS and the projector Lambda writes the durable `BALANCE` and `TXNS#` items to DynamoDB — providing the eventual read model for future balance and transaction history queries.

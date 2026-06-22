@@ -1,9 +1,9 @@
 output "db_address" {
-  value = aws_db_instance.main.address
+  value = aws_rds_cluster.main.endpoint
 }
 
 output "db_name" {
-  value = aws_db_instance.main.db_name
+  value = aws_rds_cluster.main.database_name
 }
 
 output "redis_host" {

@@ -6,11 +6,13 @@ on:
     paths:
       - 'api/src/resources/db/**'
       - 'lambdas/**'
+      - 'terraform/**'
   pull_request:
     branches: [master]
     paths:
       - 'api/src/resources/db/**'
       - 'lambdas/**'
+      - 'terraform/**'
 
 env:
   IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller

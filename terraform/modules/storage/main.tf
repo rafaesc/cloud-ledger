@@ -1,4 +1,4 @@
-# ── RDS ─────────────────────────────────────────────────────────────────────
+# ── Aurora PostgreSQL ─────────────────────────────────────────────────────────
 
 resource "aws_db_subnet_group" "main" {
   name       = "cloudledger-${var.env}"
@@ -7,20 +7,29 @@ resource "aws_db_subnet_group" "main" {
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
 
-resource "aws_db_instance" "main" {
-  identifier        = "cloudledger-postgres"
-  allocated_storage = 10
-  db_name           = "cloudledger"
-  engine            = "postgres"
-  instance_class    = "db.t3.micro"
-  username          = var.rds_username
-  password          = var.rds_password
-
+resource "aws_rds_cluster" "main" {
+  cluster_identifier     = "cloudledger-${var.env}"
+  engine                 = "aurora-postgresql"
+  engine_version         = "16.6"
+  database_name          = "cloudledger"
+  master_username        = var.rds_username
+  master_password        = var.rds_password
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.rds_sg_id]
   skip_final_snapshot    = true
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
+resource "aws_rds_cluster_instance" "writer" {
+  identifier         = "cloudledger-${var.env}-writer"
+  cluster_identifier = aws_rds_cluster.main.id
+  instance_class     = "db.t3.medium"
+  # hardcoded to avoid Floci read-back returning "postgres" instead of "aurora-postgresql"
+  engine         = "aurora-postgresql"
+  engine_version = "16.6"
+
+  tags = { Name = "cloudledger-${var.env}-writer", Project = "cloud-ledger" }
 }
 
 # ── ElastiCache ──────────────────────────────────────────────────────────────
