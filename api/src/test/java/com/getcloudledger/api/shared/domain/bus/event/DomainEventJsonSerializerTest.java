@@ -23,7 +23,9 @@ class DomainEventJsonSerializerTest {
         String json = DomainEventJsonSerializer.serialize(event);
 
         HashMap<String, Serializable> eventData = Utils.fromJson(json, new TypeReference<>() {});
+        @SuppressWarnings("unchecked")
         HashMap<String, Serializable> data = (HashMap<String, Serializable>) eventData.get("data");
+        @SuppressWarnings("unchecked")
         HashMap<String, Serializable> attributes = (HashMap<String, Serializable>) data.get("attributes");
 
         assertNotNull(data);
@@ -45,7 +47,9 @@ class DomainEventJsonSerializerTest {
         String json = DomainEventJsonSerializer.serialize(event);
 
         HashMap<String, Serializable> eventData = Utils.fromJson(json, new TypeReference<>() {});
+        @SuppressWarnings("unchecked")
         HashMap<String, Serializable> meta = (HashMap<String, Serializable>) eventData.get("meta");
+        @SuppressWarnings("unchecked")
         HashMap<String, Serializable> attributes =
                 (HashMap<String, Serializable>) ((HashMap<String, Serializable>) eventData.get("data")).get("attributes");
 

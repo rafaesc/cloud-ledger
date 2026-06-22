@@ -9,7 +9,6 @@ import com.getcloudledger.api.account.application.open.OpenAccountCommand;
 import com.getcloudledger.api.account.application.withdraw.WithdrawCommand;
 import com.getcloudledger.api.shared.domain.DomainError;
 import com.getcloudledger.api.shared.domain.bus.command.CommandBus;
-import com.getcloudledger.api.shared.domain.bus.query.QueryBus;
 import com.getcloudledger.api.shared.spring.ApiController;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;

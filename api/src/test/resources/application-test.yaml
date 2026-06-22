@@ -1,4 +1,6 @@
 spring:
+  flyway:
+    enabled: true
   datasource:
     driver-class-name: software.amazon.jdbc.Driver
     hikari:

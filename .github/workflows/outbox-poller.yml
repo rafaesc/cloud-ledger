@@ -98,8 +98,12 @@ jobs:
           done
 
       - name: Run Flyway migrations
-        run: ./gradlew flywayMigrate
         working-directory: api
+        run: |
+          ./gradlew flywayMigrate \
+            -Pflyway.url="jdbc:postgresql://localhost:7001/cloudledger" \
+            -Pflyway.user=admin \
+            -Pflyway.password=secret123
 
       - name: Build image
         run: |

@@ -21,22 +21,30 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │                                                                     │
 │ CloudLedger                                                         │
 │                                                                     │
-│   Client ──commands──▶  Spring Boot 3 API  (ECS Fargate)            │
+│   Client ──commands──▶  Spring Boot 4.1 API  (ECS Fargate)          │
 │                       │  command handlers · JWT · idempotency       │
 │          ┌────────────┴──────────────┐                              │
 │          │ 1. JDBC                    │ 2. write-through            │
-│          │   (events+outbox, one tx)  │    {balance,version}        │
-│          ▼                            ▼    (Lua version-CAS)        │
+│          │   (events+outbox, one tx)  │    {balance, 30 min TTL}    │
+│          ▼                            ▼                             │
 │   ┌─────────────────┐          ┌──────────────┐                     │
 │   │  Aurora PgSQL   │          │ ElastiCache  │                     │
 │   │  events+outbox  │          │    Redis     │                     │
-│   └────────┬────────┘          │ (balance+ver)│                     │
-│            │ 3. outbox poller   └──────▲───────┘                    │
-│            ▼                           │ backstop                   │
-│      ┌──────────┐   ┌──────────────┐   │ (version-CAS)              │
-│      │   SQS    │──▶│    Lambda    │───┘                            │
+│   └────────┬────────┘          │  (balance)   │                     │
+│            │                   └──────────────┘                     │
+│            │  3. EventBridge Scheduler                              │
+│            ▼                                                        │
+│   ┌──────────────────┐                                              │
+│   │  Lambda          │                                              │
+│   │  outbox-poller   │                                              │
+│   └────────┬─────────┘                                              │
+│            │ 4. publish                                             │
+│            ▼                                                        │
+│      ┌──────────┐   ┌──────────────┐                                │
+│      │   SQS    │──▶│    Lambda    │                                │
 │      └──────────┘   │   Projector  │                                │
 │                     └──────┬───────┘                                │
+│                            │ 5. write                               │
 │                            ▼                                        │
 │                   ┌──────────────────┐                              │
 │                   │     DynamoDB     │                              │
@@ -47,7 +55,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-> **Write ordering & balance cache (ADR-012):** within a command, the API (1) commits `events + outbox` to Aurora in one transaction, then (2) **write-throughs** the new `{balance, version}` to Redis — so the cache is fresh *after* the outbox commit and *before* the async fan-out. Only later does (3) the outbox poller publish to SQS, and the Lambda projector update the durable DynamoDB projection and repopulate Redis as a **backstop**. Both Redis writers share one Lua version-CAS, so a late projection of an older event can never regress a fresher write-through (read-your-writes). The write path itself **never reads** balance from the cache or projection — sufficient-funds validation always rehydrates the aggregate from the Aurora event store (no double-spend, no bypass of the version fence).
+> **Write ordering (ADR-012):** within a command, the API (1) commits `events + outbox` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is fresh before the async fan-out. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache or projection — sufficient-funds validation always rehydrates the aggregate from the Aurora event store (no double-spend, no bypass of the version fence).
 
 ---
 

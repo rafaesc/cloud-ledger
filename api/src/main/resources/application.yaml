@@ -3,6 +3,7 @@ spring:
     name: api
 
   flyway:
+    enabled: false
     baseline-on-migrate: true
     baseline-version: 0
     validate-on-migrate: true
@@ -20,7 +21,7 @@ spring:
   cloud:
     aws:
       sqs:
-        queue-url: http://localhost:4566/000000000000/orders
+        queue-url: http://localhost:4566/000000000000/cloudledger-events
         endpoint-url: http://localhost:4566
       region: us-east-1
 

@@ -43,6 +43,12 @@ docker build \
 echo "==> Pushing projector image to Floci ECR..."
 docker push "$PROJECTOR_REPO:latest"
 
+echo "==> Running Flyway migrations..."
+cd "$REPO_ROOT/api"
+./gradlew flywayMigrate \
+  -Pflyway.url="jdbc:postgresql://localhost:7001/cloudledger" \
+  -Pflyway.user=admin \
+  -Pflyway.password=secret123
+
 echo ""
-echo "Bootstrap complete. Run the API once to initialise Flyway migrations:"
-echo "  cd api && ./gradlew bootRun"
+echo "Bootstrap complete."

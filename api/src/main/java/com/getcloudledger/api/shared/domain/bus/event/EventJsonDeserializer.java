@@ -16,7 +16,8 @@ public class EventJsonDeserializer {
 
     private final EventsInformation information;
 
-    public <T extends BaseEvent> T deserialize(String body)
+    @SuppressWarnings("unchecked")
+public <T extends BaseEvent> T deserialize(String body)
             throws InvocationTargetException, IllegalAccessException, NoSuchMethodException,
             InstantiationException {
         HashMap<String, Object> eventData = Utils.fromJson(body, new TypeReference<>() {});
@@ -45,7 +46,8 @@ public class EventJsonDeserializer {
                 (Integer) data.get("version"));
     }
 
-    public <T extends BaseEvent> T deserializePrimitives(
+    @SuppressWarnings("unchecked")
+public <T extends BaseEvent> T deserializePrimitives(
             String eventId,
             String userId,
             String aggregateId,

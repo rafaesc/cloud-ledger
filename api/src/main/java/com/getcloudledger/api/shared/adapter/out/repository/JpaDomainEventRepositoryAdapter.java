@@ -21,6 +21,7 @@ public class JpaDomainEventRepositoryAdapter<T extends DomainEvent> implements D
     private final EventJsonDeserializer deserializer;
     private final JpaDomainEventRepository jpaDomainEventRepository;
 
+    @SuppressWarnings("unchecked")
     @Override
     @SneakyThrows
     public List<T> findAllByAggregateId(UUID aggregateId) {

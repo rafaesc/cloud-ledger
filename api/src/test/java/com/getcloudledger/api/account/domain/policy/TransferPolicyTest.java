@@ -76,7 +76,6 @@ class withTransferPolicyTest {
     @DisplayName("validate | stops at first violated rule — self-transfer takes priority over currency mismatch")
     void validate_stops_at_first_violated_rule() {
         var usdAccount = account("USD");
-        var eurAccount = account("EUR");
 
         // Both self-transfer (same account) AND currency mismatch would apply,
         // but NoSelfTransferRule (@Order 1) fires first.

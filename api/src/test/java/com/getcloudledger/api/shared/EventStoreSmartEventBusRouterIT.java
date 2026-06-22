@@ -8,7 +8,6 @@ import com.getcloudledger.api.shared.adapter.out.entities.OutboxEntity;
 import com.getcloudledger.api.shared.adapter.out.repository.JpaDomainEventRepository;
 import com.getcloudledger.api.shared.adapter.out.repository.JpaOutboxRepository;
 import com.getcloudledger.api.shared.domain.bus.event.BaseEvent;
-import com.getcloudledger.api.shared.domain.bus.event.DomainEvent;
 import com.getcloudledger.api.shared.domain.bus.event.EventBus;
 import com.getcloudledger.api.shared.domain.service.EventStore;
 import org.junit.jupiter.api.DisplayName;

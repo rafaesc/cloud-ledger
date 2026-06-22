@@ -54,6 +54,7 @@ class AccountEventSourcingHandlerTest {
     @Test
     @DisplayName("save | first persisted event receives version 0")
     void save_assigns_version_zero_to_first_event() {
+        @SuppressWarnings("unchecked")
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
         var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
@@ -75,6 +76,7 @@ class AccountEventSourcingHandlerTest {
     @Test
     @DisplayName("save | throws ConcurrencyException when stored version does not match expected")
     void save_throws_concurrency_exception_when_version_mismatch() {
+        @SuppressWarnings("unchecked")
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
         var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
@@ -93,6 +95,7 @@ class AccountEventSourcingHandlerTest {
     @Test
     @DisplayName("save | enriches balance-aware events with balance_after before persisting")
     void save_enriches_balance_aware_events_with_balance_after() {
+        @SuppressWarnings("unchecked")
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
         when(repo.findAllByAggregateId(any())).thenReturn(new ArrayList<>());
@@ -156,6 +159,7 @@ class AccountEventSourcingHandlerTest {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private AccountEventSourcingHandler buildHandler(List<DomainEvent> storedEvents) {
+        @SuppressWarnings("unchecked")
         DomainEventRepository<DomainEvent> repo = mock(DomainEventRepository.class);
         EventBus eventBus = mock(EventBus.class);
         when(repo.findAllByAggregateId(any())).thenReturn(storedEvents instanceof ArrayList

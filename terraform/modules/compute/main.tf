@@ -1,13 +1,15 @@
 # ── ECR ──────────────────────────────────────────────────────────────────────
 
 resource "aws_ecr_repository" "main" {
-  name = "cloudledger/outbox-poller"
+  name         = "cloudledger/outbox-poller"
+  force_delete = true
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
 
 resource "aws_ecr_repository" "projector" {
-  name = "cloudledger/projector"
+  name         = "cloudledger/projector"
+  force_delete = true
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
