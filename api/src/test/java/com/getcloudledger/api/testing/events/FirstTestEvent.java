@@ -9,12 +9,12 @@ import java.util.UUID;
 @NoArgsConstructor
 public class FirstTestEvent extends DomainEvent {
 
-    public FirstTestEvent(UUID aggregateId, UUID userId) {
-        super(aggregateId, userId);
+    public FirstTestEvent(UUID aggregateId, String ownerId) {
+        super(aggregateId, ownerId);
     }
 
-    public FirstTestEvent(UUID aggregateId, UUID userId, UUID eventId, String occurredOn, Integer version) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+    public FirstTestEvent(UUID aggregateId, String ownerId, UUID eventId, String occurredOn, Integer version) {
+        super(aggregateId, ownerId, eventId, occurredOn, version);
     }
 
     public static String eventName() {
@@ -32,8 +32,8 @@ public class FirstTestEvent extends DomainEvent {
     }
 
     @Override
-    public DomainEvent fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
+    public DomainEvent fromPrimitives(UUID aggregateId, String ownerId, HashMap<String, Object> body,
                                       UUID eventId, String occurredOn, Integer version) {
-        return new FirstTestEvent(aggregateId, userId, eventId, occurredOn, version);
+        return new FirstTestEvent(aggregateId, ownerId, eventId, occurredOn, version);
     }
 }

@@ -1,6 +1,11 @@
 spring:
   flyway:
     enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost/.well-known/jwks.json
   datasource:
     driver-class-name: software.amazon.jdbc.Driver
     hikari:

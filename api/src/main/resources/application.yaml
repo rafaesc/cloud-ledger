@@ -25,6 +25,12 @@ spring:
         endpoint-url: http://localhost:4566
       region: us-east-1
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${COGNITO_JWK_SET_URI:http://localhost:4566/us-east-1_local/.well-known/jwks.json}
+
   data:
     redis:
       host: localhost

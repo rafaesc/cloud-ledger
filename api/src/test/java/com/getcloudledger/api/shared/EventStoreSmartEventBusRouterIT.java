@@ -64,10 +64,10 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     @DisplayName("saveEvents | persists events and outbox rows in the same transaction and publishes to SQS after commit")
     void saveEvents_persistsEventsAndOutboxAndPublishesAfterCommit() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID();
         var events = List.of(
-                opened(aggregateId, accountId, "USD"),
-                deposited(aggregateId, accountId, "100.00"));
+                opened(aggregateId, ownerId, "USD"),
+                deposited(aggregateId, ownerId, "100.00"));
 
         inTransaction(() -> eventStore.saveEvents(aggregateId, ACCOUNT, events, -1));
 
@@ -86,8 +86,8 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     @DisplayName("saveEvents | each outbox row carries the event sequence_number and stays unpublished")
     void saveEvents_outboxCarriesSequenceNumberAndIsUnpublished() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
-        var events = List.of(opened(aggregateId, accountId, "EUR"));
+        var ownerId = UUID.randomUUID();
+        var events = List.of(opened(aggregateId, ownerId, "EUR"));
 
         inTransaction(() -> eventStore.saveEvents(aggregateId, ACCOUNT, events, -1));
 
@@ -105,8 +105,8 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     @DisplayName("saveEvents | outbox payload is the SQS wire format carrying dynamic attributes, while the event-store payload stays pure")
     void saveEvents_outboxPayloadCarriesDynamicAttributesEventStoreDoesNot() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
-        var deposited = deposited(aggregateId, accountId, "100.00");
+        var ownerId = UUID.randomUUID();
+        var deposited = deposited(aggregateId, ownerId, "100.00");
         deposited.putDynamicAttribute("balance_after", "100.00");
 
         inTransaction(() -> eventStore.saveEvents(aggregateId, ACCOUNT, List.of(deposited), -1));
@@ -128,8 +128,8 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     @DisplayName("saveEvents | rolls back events, outbox rows and SQS publish when the surrounding transaction fails")
     void saveEvents_rollsBackEverythingWhenTransactionFails() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
-        var events = List.of(opened(aggregateId, accountId, "USD"));
+        var ownerId = UUID.randomUUID();
+        var events = List.of(opened(aggregateId, ownerId, "USD"));
 
         assertThrows(IllegalStateException.class, () -> inTransaction(() -> {
             eventStore.saveEvents(aggregateId, ACCOUNT, events, -1);
@@ -145,8 +145,8 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     @DisplayName("saveEvents | propagation MANDATORY rejects the outbox write when there is no active transaction")
     void saveEvents_failsWhenCalledWithoutActiveTransaction() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
-        var events = List.of(opened(aggregateId, accountId, "USD"));
+        var ownerId = UUID.randomUUID();
+        var events = List.of(opened(aggregateId, ownerId, "USD"));
 
         // No surrounding transaction: SmartEventBusRouter.publish is Propagation.MANDATORY.
         assertThrows(IllegalTransactionStateException.class,
@@ -167,11 +167,11 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
         return jpaOutboxRepository.findAllById(events.stream().map(BaseEvent::getEventId).toList());
     }
 
-    private AccountOpened opened(UUID aggregateId, UUID accountId, String currency) {
-        return new AccountOpened(aggregateId, accountId, currency);
+    private AccountOpened opened(UUID aggregateId, UUID ownerId, String currency) {
+        return new AccountOpened(aggregateId, ownerId.toString(), currency);
     }
 
-    private MoneyDeposited deposited(UUID aggregateId, UUID accountId, String amount) {
-        return new MoneyDeposited(aggregateId, accountId, new BigDecimal(amount));
+    private MoneyDeposited deposited(UUID aggregateId, UUID ownerId, String amount) {
+        return new MoneyDeposited(aggregateId, ownerId.toString(), new BigDecimal(amount));
     }
 }

@@ -33,9 +33,9 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     @DisplayName("save + findAll | deserializes persisted event with correct fields")
     void saveAndFind_returnsDeserializedEvent() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var event = new AccountOpened(aggregateId, accountId, "USD");
+        var event = new AccountOpened(aggregateId, ownerId, "USD");
         event.setVersion(0);
 
         adapter.save(aggregateId, "account", event);
@@ -47,7 +47,7 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
         assertInstanceOf(AccountOpened.class, result);
         var deserialized = (AccountOpened) result;
         assertEquals(aggregateId, deserialized.getAggregateId());
-        assertEquals(accountId, deserialized.getUserId());
+        assertEquals(ownerId, deserialized.getOwnerId());
         assertEquals("USD", deserialized.getCurrency());
     }
 
@@ -56,11 +56,11 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     void find_filtersByAggregateId() {
         var aggregateId = UUID.randomUUID();
         var otherAggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var eventA = new AccountOpened(aggregateId, accountId, "USD");
+        var eventA = new AccountOpened(aggregateId, ownerId, "USD");
         eventA.setVersion(0);
-        var eventB = new AccountOpened(otherAggregateId, accountId, "EUR");
+        var eventB = new AccountOpened(otherAggregateId, ownerId, "EUR");
         eventB.setVersion(0);
 
         adapter.save(aggregateId, "account", eventA);
@@ -77,11 +77,11 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     @DisplayName("findAll | returns events sorted by ascending version")
     void find_returnsEventsInVersionOrder() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var opened = new AccountOpened(aggregateId, accountId, "USD");
+        var opened = new AccountOpened(aggregateId, ownerId, "USD");
         opened.setVersion(0);
-        var deposited = new MoneyDeposited(aggregateId, accountId, new BigDecimal("100.00"));
+        var deposited = new MoneyDeposited(aggregateId, ownerId, new BigDecimal("100.00"));
         deposited.setVersion(1);
 
         adapter.save(aggregateId, "account", opened);
@@ -97,9 +97,9 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     @DisplayName("save | persists aggregateType and eventName correctly")
     void save_persistsAggregateTypeAndEventName() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var event = new AccountOpened(aggregateId, accountId, "GBP");
+        var event = new AccountOpened(aggregateId, ownerId, "GBP");
         event.setVersion(0);
 
         adapter.save(aggregateId, "account", event);
@@ -118,9 +118,9 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     @DisplayName("save | stamps the returned event with the DB-generated sequence_number")
     void save_stampsSequenceNumberOnEvent() {
         var aggregateId = UUID.randomUUID();
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var event = new AccountOpened(aggregateId, accountId, "USD");
+        var event = new AccountOpened(aggregateId, ownerId, "USD");
         event.setVersion(0);
 
         var saved = adapter.save(aggregateId, "account", event);
@@ -131,11 +131,11 @@ class JpaDomainEventRepositoryAdapterIT extends AbstractIntegrationTest {
     @Test
     @DisplayName("save | sequence_numbers are strictly increasing across events")
     void save_sequenceNumbersAreStrictlyIncreasing() {
-        var accountId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var first = new AccountOpened(UUID.randomUUID(), accountId, "USD");
+        var first = new AccountOpened(UUID.randomUUID(), ownerId, "USD");
         first.setVersion(0);
-        var second = new AccountOpened(UUID.randomUUID(), accountId, "EUR");
+        var second = new AccountOpened(UUID.randomUUID(), ownerId, "EUR");
         second.setVersion(0);
 
         adapter.save(first.getAggregateId(), "account", first);

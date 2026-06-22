@@ -107,13 +107,13 @@ class TransferServiceTest {
     }
 
     private Account openedAccount(UUID accountId, String currency) {
-        var account = Account.open(new AccountId(accountId), UUID.randomUUID(), currency);
+        var account = Account.open(new AccountId(accountId), UUID.randomUUID().toString(), currency);
         account.markChangesAsCommitted();
         return account;
     }
 
     private Account openedAccountWithBalance(UUID accountId, BigDecimal balance, String currency) {
-        var account = Account.open(new AccountId(accountId), UUID.randomUUID(), currency);
+        var account = Account.open(new AccountId(accountId), UUID.randomUUID().toString(), currency);
         account.deposit(balance);
         account.markChangesAsCommitted();
         return account;

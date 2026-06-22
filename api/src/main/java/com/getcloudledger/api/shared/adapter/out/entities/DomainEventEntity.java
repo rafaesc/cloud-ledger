@@ -25,7 +25,7 @@ public class DomainEventEntity {
     @Column(name = "event_id", nullable = false)
     private UUID eventId;
 
-    private UUID userId;
+    private String ownerId;
 
     private UUID aggregateId;
 

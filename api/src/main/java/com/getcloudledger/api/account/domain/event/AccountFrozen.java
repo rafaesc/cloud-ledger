@@ -13,12 +13,12 @@ import java.util.UUID;
 @NoArgsConstructor
 public class AccountFrozen extends DomainEvent {
 
-    public AccountFrozen(UUID aggregateId, UUID userId) {
-        super(aggregateId, userId);
+    public AccountFrozen(UUID aggregateId, String ownerId) {
+        super(aggregateId, ownerId);
     }
 
-    public AccountFrozen(UUID aggregateId, UUID userId, UUID eventId, String occurredOn, Integer version) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+    public AccountFrozen(UUID aggregateId, String ownerId, UUID eventId, String occurredOn, Integer version) {
+        super(aggregateId, ownerId, eventId, occurredOn, version);
     }
 
     public static String eventName() {
@@ -36,8 +36,8 @@ public class AccountFrozen extends DomainEvent {
     }
 
     @Override
-    public AccountFrozen fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
+    public AccountFrozen fromPrimitives(UUID aggregateId, String ownerId, HashMap<String, Object> body,
                                         UUID eventId, String occurredOn, Integer version) {
-        return new AccountFrozen(aggregateId, userId, eventId, occurredOn, version);
+        return new AccountFrozen(aggregateId, ownerId, eventId, occurredOn, version);
     }
 }

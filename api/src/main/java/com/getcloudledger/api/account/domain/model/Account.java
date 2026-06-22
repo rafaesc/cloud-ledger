@@ -23,21 +23,21 @@ import java.util.UUID;
 @NoArgsConstructor
 public class Account extends AggregateRoot<AccountId> {
 
-    private UUID userId;
+    private String ownerId;
     private String currency;
     private BigDecimal balance;
     private AccountStatus status;
 
-    public static Account open(AccountId accountId, UUID userId, String currency) {
+    public static Account open(AccountId accountId, String ownerId, String currency) {
         var account = new Account();
-        account.record(new AccountOpened(accountId.getValue(), userId, currency));
+        account.record(new AccountOpened(accountId.getValue(), ownerId, currency));
         return account;
     }
 
     public void deposit(BigDecimal amount) {
         requireActive();
         requirePositive(amount);
-        record(new MoneyDeposited(getId().getValue(), userId, amount));
+        record(new MoneyDeposited(getId().getValue(), ownerId, amount));
     }
 
     public void withdraw(BigDecimal amount) {
@@ -46,7 +46,7 @@ public class Account extends AggregateRoot<AccountId> {
         if (balance.compareTo(amount) < 0) {
             throw new InsufficientFundsException(getId(), balance, amount);
         }
-        record(new MoneyWithdrawn(getId().getValue(), userId, amount));
+        record(new MoneyWithdrawn(getId().getValue(), ownerId, amount));
     }
 
     public void debitTransfer(BigDecimal amount, UUID counterpartAccountId, UUID transferId) {
@@ -55,37 +55,37 @@ public class Account extends AggregateRoot<AccountId> {
         if (balance.compareTo(amount) < 0) {
             throw new InsufficientFundsException(getId(), balance, amount);
         }
-        record(new TransferDebited(getId().getValue(), userId, amount, counterpartAccountId, transferId));
+        record(new TransferDebited(getId().getValue(), ownerId, amount, counterpartAccountId, transferId));
     }
 
     public void creditTransfer(BigDecimal amount, UUID counterpartAccountId, UUID transferId) {
         requireActive();
         requirePositive(amount);
-        record(new TransferCredited(getId().getValue(), userId, amount, counterpartAccountId, transferId));
+        record(new TransferCredited(getId().getValue(), ownerId, amount, counterpartAccountId, transferId));
     }
 
     public void failTransfer(BigDecimal amount, UUID counterpartAccountId, UUID transferId, String reason) {
         requirePositive(amount);
-        record(new TransferFailed(getId().getValue(), userId, amount, counterpartAccountId, transferId, reason));
+        record(new TransferFailed(getId().getValue(), ownerId, amount, counterpartAccountId, transferId, reason));
     }
 
     public void freeze() {
         if (status != AccountStatus.ACTIVE) {
             throw new IllegalStateException("Only an ACTIVE account can be frozen, current status: " + status);
         }
-        record(new AccountFrozen(getId().getValue(), userId));
+        record(new AccountFrozen(getId().getValue(), ownerId));
     }
 
     public void close() {
         if (status == AccountStatus.CLOSED) {
             throw new IllegalStateException("Account is already closed");
         }
-        record(new AccountClosed(getId().getValue(), userId));
+        record(new AccountClosed(getId().getValue(), ownerId));
     }
 
     public void apply(AccountOpened event) {
         setId(new AccountId(event.getAggregateId()));
-        this.userId = event.getUserId();
+        this.ownerId = event.getOwnerId();
         this.currency = event.getCurrency();
         this.status = AccountStatus.ACTIVE;
         this.balance = BigDecimal.ZERO;

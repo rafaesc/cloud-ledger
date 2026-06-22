@@ -5,17 +5,17 @@ import java.util.UUID;
 
 public abstract class DomainEvent extends BaseEvent {
 
-    public DomainEvent(UUID aggregateId, UUID userId) {
-        super(aggregateId, userId);
+    public DomainEvent(UUID aggregateId, String ownerId) {
+        super(aggregateId, ownerId);
     }
 
     public DomainEvent(
             UUID aggregateId,
-            UUID userId,
+            String ownerId,
             UUID eventId,
             String occurredOn,
             Integer version) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+        super(aggregateId, ownerId, eventId, occurredOn, version);
     }
 
     protected DomainEvent() {
@@ -24,7 +24,7 @@ public abstract class DomainEvent extends BaseEvent {
 
     public DomainEvent fromPrimitives(
             UUID aggregateId,
-            UUID userId,
+            String ownerId,
             HashMap<String, Object> body,
             UUID eventId,
             String occurredOn,

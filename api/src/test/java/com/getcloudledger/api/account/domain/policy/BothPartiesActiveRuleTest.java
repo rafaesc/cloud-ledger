@@ -72,6 +72,6 @@ class BothPartiesActiveRuleTest {
     }
 
     private Account activeAccount() {
-        return Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
+        return Account.open(AccountId.generate(), UUID.randomUUID().toString(), "USD");
     }
 }

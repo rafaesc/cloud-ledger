@@ -17,6 +17,7 @@ provider "aws" {
     rds         = "http://localhost:4566"
     scheduler   = "http://localhost:4566"
     sqs         = "http://localhost:4566"
+    cognitoidp  = "http://localhost:4566"
   }
 }
 
@@ -59,4 +60,10 @@ module "compute" {
   sqs_endpoint_url      = "http://floci:4566"
   dynamodb_table_name   = module.storage.dynamodb_table_name
   dynamodb_endpoint_url = "http://floci:4566"
+}
+
+module "auth" {
+  source = "../../modules/auth"
+
+  env                   = "local"
 }

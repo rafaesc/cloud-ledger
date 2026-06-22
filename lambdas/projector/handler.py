@@ -51,7 +51,7 @@ def dispatch(event_type: str, data: dict[str, Any], meta: dict[str, Any]) -> Non
 def handle_account_opened(data: dict[str, Any]) -> None:
     attrs = data["attributes"]
     account_id = attrs["aggregate_id"]
-    owner_id = attrs["user_id"]
+    owner_id = attrs["owner_id"]
     currency = attrs["currency"]
     occurred_on = data["occurred_on"]
     version = data["version"]

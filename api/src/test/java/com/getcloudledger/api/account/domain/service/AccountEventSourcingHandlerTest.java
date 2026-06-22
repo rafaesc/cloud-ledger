@@ -42,7 +42,7 @@ class AccountEventSourcingHandlerTest {
         var handler = buildHandler(new ArrayList<>());
 
         var accountId = AccountId.generate();
-        var account = Account.open(accountId, UUID.randomUUID(), "USD");
+        var account = Account.open(accountId, UUID.randomUUID().toString(), "USD");
         assertFalse(account.pullUncommittedChanges().isEmpty());
 
         handler.save(account);
@@ -63,7 +63,7 @@ class AccountEventSourcingHandlerTest {
         when(repo.save(any(), anyString(), any())).thenAnswer(inv -> inv.getArgument(2));
 
         var accountId = AccountId.generate();
-        var account = Account.open(accountId, UUID.randomUUID(), "USD");
+        var account = Account.open(accountId, UUID.randomUUID().toString(), "USD");
 
         handler.save(account);
 
@@ -82,11 +82,11 @@ class AccountEventSourcingHandlerTest {
         var handler = new AccountEventSourcingHandler(new EventStore(repo, eventBus), mock(BalanceCache.class), List.of());
 
         var accountId = AccountId.generate();
-        var existingEvent = new AccountOpened(accountId.getValue(), UUID.randomUUID(), "USD");
+        var existingEvent = new AccountOpened(accountId.getValue(), UUID.randomUUID().toString(), "USD");
         existingEvent.setVersion(1);
         when(repo.findAllByAggregateId(eq(accountId.getValue()))).thenReturn(List.of(existingEvent));
 
-        var account = Account.open(accountId, UUID.randomUUID(), "USD");
+        var account = Account.open(accountId, UUID.randomUUID().toString(), "USD");
         account.setVersion(0);
 
         assertThrows(ConcurrencyException.class, () -> handler.save(account));
@@ -104,7 +104,7 @@ class AccountEventSourcingHandlerTest {
                 new EventStore(repo, eventBus), mock(BalanceCache.class), List.of(new BalanceAfterEnricher()));
 
         var accountId = AccountId.generate();
-        var account = Account.open(accountId, UUID.randomUUID(), "USD");
+        var account = Account.open(accountId, UUID.randomUUID().toString(), "USD");
         account.deposit(new BigDecimal("100.00"));
 
         handler.save(account);
@@ -136,11 +136,11 @@ class AccountEventSourcingHandlerTest {
     @DisplayName("getById | replays events and sets aggregate to latest version")
     void getById_replays_events_and_sets_latest_version() {
         var accountUuid = UUID.randomUUID();
-        var userId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
-        var opened = new AccountOpened(accountUuid, userId, "USD");
+        var opened = new AccountOpened(accountUuid, ownerId, "USD");
         opened.setVersion(0);
-        var deposited = new MoneyDeposited(accountUuid, userId, new BigDecimal("250.00"));
+        var deposited = new MoneyDeposited(accountUuid, ownerId, new BigDecimal("250.00"));
         deposited.setVersion(1);
 
         var handler = buildHandler(List.of(opened, deposited));
@@ -153,7 +153,7 @@ class AccountEventSourcingHandlerTest {
         assertEquals(AccountStatus.ACTIVE, account.getStatus());
         assertEquals(new BigDecimal("250.00"), account.getBalance());
         assertEquals(1, account.getVersion());
-        assertNotNull(account.getUserId());
+        assertNotNull(account.getOwnerId());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

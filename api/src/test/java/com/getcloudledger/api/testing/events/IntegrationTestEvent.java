@@ -15,9 +15,9 @@ public class IntegrationTestEvent extends IntegrationEvent {
 
     private String valueObject;
 
-    public IntegrationTestEvent(UUID aggregateId, UUID userId, UUID eventId, String occurredOn,
+    public IntegrationTestEvent(UUID aggregateId, String ownerId, UUID eventId, String occurredOn,
                                 Integer version, String valueObject) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+        super(aggregateId, ownerId, eventId, occurredOn, version);
         this.valueObject = valueObject;
     }
 
@@ -26,9 +26,9 @@ public class IntegrationTestEvent extends IntegrationEvent {
     }
 
     @Override
-    public IntegrationEvent fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
+    public IntegrationEvent fromPrimitives(UUID aggregateId, String ownerId, HashMap<String, Object> body,
                                            UUID eventId, String occurredOn, Integer version) {
-        return new IntegrationTestEvent(aggregateId, userId, eventId, occurredOn, version,
+        return new IntegrationTestEvent(aggregateId, ownerId, eventId, occurredOn, version,
                 (String) body.get("value_object"));
     }
 }

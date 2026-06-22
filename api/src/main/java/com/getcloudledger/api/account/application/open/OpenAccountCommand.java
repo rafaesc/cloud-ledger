@@ -10,6 +10,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OpenAccountCommand implements Command {
     private final UUID accountId;
-    private final UUID userId;
+    private final String ownerId;
     private final String currency;
 }

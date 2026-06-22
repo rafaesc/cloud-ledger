@@ -11,12 +11,13 @@ import com.getcloudledger.api.shared.domain.DomainError;
 import com.getcloudledger.api.shared.domain.bus.command.CommandBus;
 import com.getcloudledger.api.shared.spring.ApiController;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,13 +36,14 @@ public class AccountController extends ApiController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public void openAccount(
-            @RequestHeader("X-User-Id") @NotNull UUID userId,
+            @AuthenticationPrincipal Jwt jwt,
             @RequestBody @Valid OpenAccountRequest request) {
-        dispatch(new OpenAccountCommand(request.accountId(), userId, request.currency()));
+        dispatch(new OpenAccountCommand(request.accountId(), jwt.getSubject(), request.currency()));
     }
 
     @PostMapping("/{accountId}/deposits")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@accountSecurity.isOwner(#accountId, authentication)")
     public void deposit(
             @PathVariable UUID accountId,
             @RequestBody @Valid AmountRequest request) {
@@ -50,6 +52,7 @@ public class AccountController extends ApiController {
 
     @PostMapping("/{accountId}/withdrawals")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@accountSecurity.isOwner(#accountId, authentication)")
     public void withdraw(
             @PathVariable UUID accountId,
             @RequestBody @Valid AmountRequest request) {
@@ -58,12 +61,14 @@ public class AccountController extends ApiController {
 
     @PostMapping("/{accountId}/freeze")
     @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("@accountSecurity.isOwner(#accountId, authentication)")
     public void freeze(@PathVariable UUID accountId) {
         dispatch(new FreezeAccountCommand(accountId));
     }
 
     @PostMapping("/{accountId}/close")
     @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("@accountSecurity.isOwner(#accountId, authentication)")
     public void close(@PathVariable UUID accountId) {
         dispatch(new CloseAccountCommand(accountId));
     }

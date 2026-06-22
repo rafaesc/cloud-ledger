@@ -17,7 +17,7 @@ public class EventJsonDeserializer {
     private final EventsInformation information;
 
     @SuppressWarnings("unchecked")
-public <T extends BaseEvent> T deserialize(String body)
+    public <T extends BaseEvent> T deserialize(String body)
             throws InvocationTargetException, IllegalAccessException, NoSuchMethodException,
             InstantiationException {
         HashMap<String, Object> eventData = Utils.fromJson(body, new TypeReference<>() {});
@@ -30,7 +30,7 @@ public <T extends BaseEvent> T deserialize(String body)
         Method fromPrimitivesMethod = eventClass.getMethod(
                 "fromPrimitives",
                 UUID.class,
-                UUID.class,
+                String.class,
                 HashMap.class,
                 UUID.class,
                 String.class,
@@ -39,7 +39,7 @@ public <T extends BaseEvent> T deserialize(String body)
         return (T) fromPrimitivesMethod.invoke(
                 nullInstance,
                 UUID.fromString((String) attributes.get("aggregate_id")),
-                UUID.fromString((String) attributes.get("user_id")),
+                (String) attributes.get("owner_id"),
                 attributes,
                 UUID.fromString((String) data.get("event_id")),
                 (String) data.get("occurred_on"),
@@ -47,9 +47,9 @@ public <T extends BaseEvent> T deserialize(String body)
     }
 
     @SuppressWarnings("unchecked")
-public <T extends BaseEvent> T deserializePrimitives(
+    public <T extends BaseEvent> T deserializePrimitives(
             String eventId,
-            String userId,
+            String ownerId,
             String aggregateId,
             String eventName,
             String occurredOn,
@@ -65,7 +65,7 @@ public <T extends BaseEvent> T deserializePrimitives(
         Method fromPrimitivesMethod = eventClass.getMethod(
                 "fromPrimitives",
                 UUID.class,
-                UUID.class,
+                String.class,
                 HashMap.class,
                 UUID.class,
                 String.class,
@@ -74,7 +74,7 @@ public <T extends BaseEvent> T deserializePrimitives(
         return (T) fromPrimitivesMethod.invoke(
                 nullInstance,
                 UUID.fromString(aggregateId),
-                UUID.fromString(userId),
+                ownerId,
                 attributes,
                 UUID.fromString(eventId),
                 occurredOn,

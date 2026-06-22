@@ -19,19 +19,19 @@ public class TransferFailed extends DomainEvent implements BalanceAware {
     private UUID transferId;
     private String reason;
 
-    public TransferFailed(UUID aggregateId, UUID userId, BigDecimal amount,
+    public TransferFailed(UUID aggregateId, String ownerId, BigDecimal amount,
                           UUID counterpartAccountId, UUID transferId, String reason) {
-        super(aggregateId, userId);
+        super(aggregateId, ownerId);
         this.amount = amount;
         this.counterpartAccountId = counterpartAccountId;
         this.transferId = transferId;
         this.reason = reason;
     }
 
-    public TransferFailed(UUID aggregateId, UUID userId, UUID eventId, String occurredOn,
+    public TransferFailed(UUID aggregateId, String ownerId, UUID eventId, String occurredOn,
                           Integer version, BigDecimal amount,
                           UUID counterpartAccountId, UUID transferId, String reason) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+        super(aggregateId, ownerId, eventId, occurredOn, version);
         this.amount = amount;
         this.counterpartAccountId = counterpartAccountId;
         this.transferId = transferId;
@@ -58,10 +58,10 @@ public class TransferFailed extends DomainEvent implements BalanceAware {
     }
 
     @Override
-    public TransferFailed fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
+    public TransferFailed fromPrimitives(UUID aggregateId, String ownerId, HashMap<String, Object> body,
                                          UUID eventId, String occurredOn, Integer version) {
         return new TransferFailed(
-                aggregateId, userId, eventId, occurredOn, version,
+                aggregateId, ownerId, eventId, occurredOn, version,
                 new BigDecimal((String) body.get("amount")),
                 UUID.fromString((String) body.get("counterpart_account_id")),
                 UUID.fromString((String) body.get("transfer_id")),

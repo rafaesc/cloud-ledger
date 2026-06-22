@@ -15,14 +15,14 @@ public class SecondTestEvent extends DomainEvent {
 
     private String valueObject;
 
-    public SecondTestEvent(UUID aggregateId, UUID userId, String valueObject) {
-        super(aggregateId, userId);
+    public SecondTestEvent(UUID aggregateId, String ownerId, String valueObject) {
+        super(aggregateId, ownerId);
         this.valueObject = valueObject;
     }
 
-    public SecondTestEvent(UUID aggregateId, UUID userId, UUID eventId, String occurredOn,
+    public SecondTestEvent(UUID aggregateId, String ownerId, UUID eventId, String occurredOn,
                            Integer version, String valueObject) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+        super(aggregateId, ownerId, eventId, occurredOn, version);
         this.valueObject = valueObject;
     }
 
@@ -43,9 +43,9 @@ public class SecondTestEvent extends DomainEvent {
     }
 
     @Override
-    public DomainEvent fromPrimitives(UUID aggregateId, UUID userId, HashMap<String, Object> body,
+    public DomainEvent fromPrimitives(UUID aggregateId, String ownerId, HashMap<String, Object> body,
                                       UUID eventId, String occurredOn, Integer version) {
-        return new SecondTestEvent(aggregateId, userId, eventId, occurredOn, version,
+        return new SecondTestEvent(aggregateId, ownerId, eventId, occurredOn, version,
                 (String) body.get("value_object"));
     }
 }

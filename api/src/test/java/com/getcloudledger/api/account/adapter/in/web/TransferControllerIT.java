@@ -11,7 +11,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -21,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,16 +51,16 @@ class TransferControllerIT {
     private EventBus sqsEventBus;
 
     @Test
-    @WithMockUser
     @DisplayName("transfer | returns 201 and persists TransferDebited + TransferCredited events when both accounts exist")
     void transfer_returns_201_and_persists_debit_and_credit_events() throws Exception {
-        var sourceId = openAccount("USD");
-        deposit(sourceId, "500.00");
-        var destinationId = openAccount("USD");
+        var sourceOwnerId = "source-owner-" + UUID.randomUUID();
+        var sourceId = openAccount("USD", sourceOwnerId);
+        deposit(sourceId, "500.00", sourceOwnerId);
+        var destinationId = openAccount("USD", "destination-owner-" + UUID.randomUUID());
         var transferId = UUID.randomUUID();
 
         mockMvc.perform(post("/v1/transfers")
-                        .with(csrf())
+                        .with(jwt().jwt(b -> b.subject(sourceOwnerId)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .content("""
@@ -82,11 +81,30 @@ class TransferControllerIT {
     }
 
     @Test
-    @WithMockUser
+    @DisplayName("transfer | returns 403 when JWT subject does not own source account")
+    void transfer_returns_403_when_caller_does_not_own_source_account() throws Exception {
+        var sourceId = openAccount("USD", "real-source-owner");
+
+        mockMvc.perform(post("/v1/transfers")
+                        .with(jwt().jwt(b -> b.subject("different-caller")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .content("""
+                                {
+                                  "sourceAccountId": "%s",
+                                  "destinationAccountId": "%s",
+                                  "amount": 50.00,
+                                  "transferId": "%s"
+                                }
+                                """.formatted(sourceId, UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("transfer | returns 400 when amount is missing")
     void transfer_returns_400_when_amount_is_missing() throws Exception {
         mockMvc.perform(post("/v1/transfers")
-                        .with(csrf())
+                        .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .content("""
@@ -101,22 +119,21 @@ class TransferControllerIT {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private UUID openAccount(String currency) throws Exception {
+    private UUID openAccount(String currency, String ownerId) throws Exception {
         var accountId = UUID.randomUUID();
         mockMvc.perform(post("/v1/accounts")
-                .with(csrf())
+                .with(jwt().jwt(b -> b.subject(ownerId)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Idempotency-Key", UUID.randomUUID().toString())
-                .header("X-User-Id", UUID.randomUUID().toString())
                 .content("""
                         {"accountId": "%s", "currency": "%s"}
                         """.formatted(accountId, currency)));
         return accountId;
     }
 
-    private void deposit(UUID accountId, String amount) throws Exception {
+    private void deposit(UUID accountId, String amount, String ownerId) throws Exception {
         mockMvc.perform(post("/v1/accounts/{id}/deposits", accountId)
-                .with(csrf())
+                .with(jwt().jwt(b -> b.subject(ownerId)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Idempotency-Key", UUID.randomUUID().toString())
                 .content("""

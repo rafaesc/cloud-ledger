@@ -96,7 +96,7 @@ class withTransferPolicyTest {
     }
 
     private Account account(String currency) {
-        return Account.open(AccountId.generate(), UUID.randomUUID(), currency);
+        return Account.open(AccountId.generate(), UUID.randomUUID().toString(), currency);
     }
 
     private Account fundedAccount(String currency) {

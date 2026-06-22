@@ -14,7 +14,7 @@ import java.util.UUID;
 class AccountDomainEventSerializationTest {
 
     private static final UUID   AGGREGATE_ID = UUID.fromString("aaaa0000-0000-0000-0000-000000000001");
-    private static final UUID   USER_ID   = UUID.fromString("bbbb0000-0000-0000-0000-000000000002");
+    private static final String OWNER_ID     = "bbbb0000-0000-0000-0000-000000000002";
     private static final UUID   EVENT_ID     = UUID.fromString("eeee0000-0000-0000-0000-000000000005");
     private static final UUID   COUNTERPART  = UUID.fromString("cccc0000-0000-0000-0000-000000000003");
     private static final UUID   TRANSFER_ID  = UUID.fromString("dddd0000-0000-0000-0000-000000000004");
@@ -31,7 +31,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | AccountOpened full wire format")
     void accountOpened_serialize() throws Exception {
-        var event = new AccountOpened(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION, "USD");
+        var event = new AccountOpened(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION, "USD");
 
         assertJson("""
                 {
@@ -43,7 +43,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "currency": "USD"
                     }
                   },
@@ -57,7 +57,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | MoneyDeposited full wire format — balance_after in meta, not in attributes")
     void moneyDeposited_serialize() throws Exception {
-        var event = new MoneyDeposited(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION,
+        var event = new MoneyDeposited(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION,
                 new BigDecimal("100.50"));
         event.putDynamicAttribute("balance_after", BALANCE);
 
@@ -71,7 +71,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "amount": "100.50"
                     }
                   },
@@ -87,7 +87,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | MoneyWithdrawn full wire format — balance_after in meta, not in attributes")
     void moneyWithdrawn_serialize() throws Exception {
-        var event = new MoneyWithdrawn(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION,
+        var event = new MoneyWithdrawn(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION,
                 new BigDecimal("200.00"));
         event.putDynamicAttribute("balance_after", BALANCE);
 
@@ -101,7 +101,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "amount": "200.00"
                     }
                   },
@@ -117,7 +117,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | TransferDebited full wire format — balance_after in meta, not in attributes")
     void transferDebited_serialize() throws Exception {
-        var event = new TransferDebited(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION,
+        var event = new TransferDebited(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION,
                 new BigDecimal("300.00"), COUNTERPART, TRANSFER_ID);
         event.putDynamicAttribute("balance_after", BALANCE);
 
@@ -131,7 +131,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "amount": "300.00",
                       "counterpart_account_id": "cccc0000-0000-0000-0000-000000000003",
                       "transfer_id": "dddd0000-0000-0000-0000-000000000004"
@@ -149,7 +149,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | TransferCredited full wire format — balance_after in meta, not in attributes")
     void transferCredited_serialize() throws Exception {
-        var event = new TransferCredited(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION,
+        var event = new TransferCredited(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION,
                 new BigDecimal("300.00"), COUNTERPART, TRANSFER_ID);
         event.putDynamicAttribute("balance_after", BALANCE);
 
@@ -163,7 +163,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "amount": "300.00",
                       "counterpart_account_id": "cccc0000-0000-0000-0000-000000000003",
                       "transfer_id": "dddd0000-0000-0000-0000-000000000004"
@@ -181,7 +181,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | TransferFailed full wire format — balance_after in meta, not in attributes")
     void transferFailed_serialize() throws Exception {
-        var event = new TransferFailed(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION,
+        var event = new TransferFailed(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION,
                 new BigDecimal("150.00"), COUNTERPART, TRANSFER_ID, "INSUFFICIENT_FUNDS");
         event.putDynamicAttribute("balance_after", BALANCE);
 
@@ -195,7 +195,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002",
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002",
                       "amount": "150.00",
                       "counterpart_account_id": "cccc0000-0000-0000-0000-000000000003",
                       "transfer_id": "dddd0000-0000-0000-0000-000000000004",
@@ -214,7 +214,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | AccountFrozen full wire format")
     void accountFrozen_serialize() throws Exception {
-        var event = new AccountFrozen(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION);
+        var event = new AccountFrozen(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION);
 
         assertJson("""
                 {
@@ -226,7 +226,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002"
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002"
                     }
                   },
                   "meta": {}
@@ -239,7 +239,7 @@ class AccountDomainEventSerializationTest {
     @Test
     @DisplayName("serialize | AccountClosed full wire format")
     void accountClosed_serialize() throws Exception {
-        var event = new AccountClosed(AGGREGATE_ID, USER_ID, EVENT_ID, OCCURRED_ON, VERSION);
+        var event = new AccountClosed(AGGREGATE_ID, OWNER_ID, EVENT_ID, OCCURRED_ON, VERSION);
 
         assertJson("""
                 {
@@ -251,7 +251,7 @@ class AccountDomainEventSerializationTest {
                     "occurred_on": "2024-01-15T10:30:00",
                     "attributes": {
                       "aggregate_id": "aaaa0000-0000-0000-0000-000000000001",
-                      "user_id": "bbbb0000-0000-0000-0000-000000000002"
+                      "owner_id": "bbbb0000-0000-0000-0000-000000000002"
                     }
                   },
                   "meta": {}

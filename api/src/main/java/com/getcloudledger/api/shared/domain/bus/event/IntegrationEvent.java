@@ -5,9 +5,9 @@ import java.util.UUID;
 
 public abstract class IntegrationEvent extends BaseEvent {
 
-    public IntegrationEvent(UUID aggregateId, UUID userId, UUID eventId,
+    public IntegrationEvent(UUID aggregateId, String ownerId, UUID eventId,
                             String occurredOn, Integer version) {
-        super(aggregateId, userId, eventId, occurredOn, version);
+        super(aggregateId, ownerId, eventId, occurredOn, version);
     }
 
     protected IntegrationEvent() {
@@ -16,7 +16,7 @@ public abstract class IntegrationEvent extends BaseEvent {
 
     public abstract IntegrationEvent fromPrimitives(
             UUID aggregateId,
-            UUID userId,
+            String ownerId,
             HashMap<String, Object> body,
             UUID eventId,
             String occurredOn,

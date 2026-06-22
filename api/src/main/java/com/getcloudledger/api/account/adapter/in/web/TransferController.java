@@ -7,6 +7,7 @@ import com.getcloudledger.api.shared.domain.bus.command.CommandBus;
 import com.getcloudledger.api.shared.spring.ApiController;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,7 @@ public class TransferController extends ApiController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@accountSecurity.isOwner(#request.sourceAccountId(), authentication)")
     public void transfer(@RequestBody @Valid TransferRequest request) {
         dispatch(new TransferCommand(
                 request.sourceAccountId(),

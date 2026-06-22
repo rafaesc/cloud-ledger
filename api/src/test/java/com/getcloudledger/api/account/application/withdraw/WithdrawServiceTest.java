@@ -66,7 +66,7 @@ class WithdrawServiceTest {
     }
 
     private Account openedAccountWithBalance(UUID accountId, BigDecimal balance) {
-        var account = Account.open(new AccountId(accountId), UUID.randomUUID(), "USD");
+        var account = Account.open(new AccountId(accountId), UUID.randomUUID().toString(), "USD");
         account.deposit(balance);
         account.markChangesAsCommitted();
         return account;

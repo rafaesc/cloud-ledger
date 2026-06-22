@@ -39,7 +39,7 @@ def account_opened_payload(version: int = 1, sequence_number: int = 1) -> dict:
             "occurred_on": "2024-01-15T10:30:00",
             "attributes": {
                 "aggregate_id": ACCOUNT_ID,
-                "user_id": OWNER_ID,
+                "owner_id": OWNER_ID,
                 "currency": "USD",
             },
         },
@@ -234,7 +234,7 @@ class TestAccountFrozen:
                 "version": 2,
                 "sequence_number": 2,
                 "occurred_on": "2024-01-16T08:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -254,7 +254,7 @@ class TestAccountFrozen:
                 "version": 3,
                 "sequence_number": 3,
                 "occurred_on": "2024-01-17T09:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -265,7 +265,7 @@ class TestAccountFrozen:
                 "version": 2,
                 "sequence_number": 2,
                 "occurred_on": "2024-01-16T08:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -292,7 +292,7 @@ class TestAccountClosed:
                 "version": 2,
                 "sequence_number": 2,
                 "occurred_on": "2024-01-17T09:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -312,7 +312,7 @@ class TestAccountClosed:
                 "version": 4,
                 "sequence_number": 4,
                 "occurred_on": "2024-01-18T10:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -323,7 +323,7 @@ class TestAccountClosed:
                 "version": 2,
                 "sequence_number": 2,
                 "occurred_on": "2024-01-17T09:00:00",
-                "attributes": {"aggregate_id": ACCOUNT_ID, "user_id": OWNER_ID},
+                "attributes": {"aggregate_id": ACCOUNT_ID, "owner_id": OWNER_ID},
             },
             "meta": {},
         }
@@ -487,7 +487,7 @@ class TestBatch:
                 "occurred_on": "2024-01-15T10:35:00",
                 "attributes": {
                     "aggregate_id": account2,
-                    "user_id": OWNER_ID,
+                    "owner_id": OWNER_ID,
                     "currency": "USD",
                 },
             },

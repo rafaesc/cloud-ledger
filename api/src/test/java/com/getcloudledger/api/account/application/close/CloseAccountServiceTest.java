@@ -51,7 +51,7 @@ class CloseAccountServiceTest {
     }
 
     private Account openedAccount(UUID accountId) {
-        var account = Account.open(new AccountId(accountId), UUID.randomUUID(), "USD");
+        var account = Account.open(new AccountId(accountId), UUID.randomUUID().toString(), "USD");
         account.markChangesAsCommitted();
         return account;
     }

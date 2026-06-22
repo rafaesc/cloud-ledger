@@ -14,7 +14,7 @@ public class OpenAccountCommandHandler implements CommandHandler<OpenAccountComm
     public void handle(OpenAccountCommand command) {
         accountOpenerService.open(
                 command.getAccountId(),
-                command.getUserId(),
+                command.getOwnerId(),
                 command.getCurrency()
         );
     }

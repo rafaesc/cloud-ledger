@@ -20,7 +20,7 @@ class NoSelfTransferRuleTest {
     @Test
     @DisplayName("enforce | throws TransferNotAllowedException when source and destination are the same account")
     void enforce_throws_when_source_and_destination_are_same_account() {
-        var account = Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
+        var account = Account.open(AccountId.generate(), UUID.randomUUID().toString(), "USD");
 
         assertThrows(TransferNotAllowedException.class,
                 () -> rule.enforce(account, account, new BigDecimal("100.00")));
@@ -29,8 +29,8 @@ class NoSelfTransferRuleTest {
     @Test
     @DisplayName("enforce | passes when source and destination are different accounts")
     void enforce_passes_when_source_and_destination_are_different_accounts() {
-        var source = Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
-        var destination = Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
+        var source = Account.open(AccountId.generate(), UUID.randomUUID().toString(), "USD");
+        var destination = Account.open(AccountId.generate(), UUID.randomUUID().toString(), "USD");
 
         assertDoesNotThrow(() -> rule.enforce(source, destination, new BigDecimal("100.00")));
     }

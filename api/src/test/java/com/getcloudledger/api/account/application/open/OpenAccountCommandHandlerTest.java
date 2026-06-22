@@ -18,9 +18,9 @@ class OpenAccountCommandHandlerTest {
         var handler = new OpenAccountCommandHandler(service);
 
         var accountId = UUID.randomUUID();
-        var userId = UUID.randomUUID();
-        handler.handle(new OpenAccountCommand(accountId, userId, "USD"));
+        var ownerId = UUID.randomUUID().toString();
+        handler.handle(new OpenAccountCommand(accountId, ownerId, "USD"));
 
-        verify(service).open(accountId, userId, "USD");
+        verify(service).open(accountId, ownerId, "USD");
     }
 }

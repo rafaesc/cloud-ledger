@@ -24,12 +24,12 @@ class AccountTest {
     @DisplayName("open | creates ACTIVE account with zero balance and one uncommitted event")
     void open_initialises_active_account_with_zero_balance() {
         var accountId = AccountId.generate();
-        var ownerId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
 
         var account = Account.open(accountId, ownerId, "USD");
 
         assertEquals(accountId, account.getId());
-        assertEquals(ownerId, account.getUserId());
+        assertEquals(ownerId, account.getOwnerId());
         assertEquals("USD", account.getCurrency());
         assertEquals(AccountStatus.ACTIVE, account.getStatus());
         assertEquals(BigDecimal.ZERO, account.getBalance());
@@ -319,7 +319,7 @@ class AccountTest {
     @DisplayName("replayEvents | reconstitutes complete account state from event stream")
     void replayEvents_reconstitutes_complete_account_state() {
         var accountId = AccountId.generate();
-        var ownerId = UUID.randomUUID();
+        var ownerId = UUID.randomUUID().toString();
         var original = Account.open(accountId, ownerId, "EUR");
         original.deposit(new BigDecimal("1000.00"));
         original.withdraw(new BigDecimal("200.00"));
@@ -329,7 +329,7 @@ class AccountTest {
         reconstituted.replayEvents(original.pullUncommittedChanges());
 
         assertEquals(accountId, reconstituted.getId());
-        assertEquals(ownerId, reconstituted.getUserId());
+        assertEquals(ownerId, reconstituted.getOwnerId());
         assertEquals("EUR", reconstituted.getCurrency());
         assertEquals(AccountStatus.ACTIVE, reconstituted.getStatus());
         assertEquals(new BigDecimal("1300.00"), reconstituted.getBalance());
@@ -374,7 +374,7 @@ class AccountTest {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private Account activeAccount() {
-        return Account.open(AccountId.generate(), UUID.randomUUID(), "USD");
+        return Account.open(AccountId.generate(), UUID.randomUUID().toString(), "USD");
     }
 
     private Account fundedAccount(String amount) {

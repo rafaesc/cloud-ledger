@@ -18,7 +18,7 @@ class DomainEventJsonSerializerTest {
 
     @Test
     void serialize_includes_expected_fields() {
-        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID());
+        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID().toString());
 
         String json = DomainEventJsonSerializer.serialize(event);
 
@@ -36,12 +36,12 @@ class DomainEventJsonSerializerTest {
         assertEquals(event.getOccurredOn(), data.get("occurred_on"));
 
         assertEquals(event.getAggregateId().toString(), attributes.get("aggregate_id"));
-        assertEquals(event.getUserId().toString(), attributes.get("user_id"));
+        assertEquals(event.getOwnerId(), attributes.get("owner_id"));
     }
 
     @Test
     void serialize_exposes_dynamic_attributes_under_meta() {
-        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID());
+        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID().toString());
         event.putDynamicAttribute("balance_after", "150.00");
 
         String json = DomainEventJsonSerializer.serialize(event);
@@ -59,7 +59,7 @@ class DomainEventJsonSerializerTest {
 
     @Test
     void serializePrimitives_omits_dynamic_attributes() {
-        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID());
+        FirstTestEvent event = new FirstTestEvent(UUID.randomUUID(), UUID.randomUUID().toString());
         event.putDynamicAttribute("balance_after", "150.00");
 
         String json = DomainEventJsonSerializer.serializePrimitives(event);

@@ -23,41 +23,44 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │                                                                     │
 │ CloudLedger                                                         │
 │                                                                     │
-│   Client ──commands──▶  Spring Boot 4.1 API  (ECS Fargate)          │
-│                       │  command handlers · X-User-Id · idempotency │
-│          ┌────────────┴──────────────┐                              │
-│          │ 1. JDBC                    │ 2. write-through            │
-│          │   (events+outbox, one tx)  │    {balance, 30 min TTL}    │
-│          ▼                            ▼                             │
-│   ┌─────────────────┐          ┌──────────────┐                     │
-│   │  Aurora PgSQL   │          │ ElastiCache  │                     │
-│   │  events+outbox  │          │    Redis     │                     │
-│   └────────┬────────┘          │  (balance)   │                     │
-│            │                   └──────────────┘                     │
-│            │  3. EventBridge Scheduler                              │
+│  ┌─────────┐  JWT (M2M)   ┌──────────────────────────────────────┐ │
+│  │ Cognito │◀─────────────│  Spring Boot 4.1 API  (ECS Fargate)  │ │
+│  │  (auth) │─ validates ─▶│  command handlers · JWT · idempotency│ │
+│  └─────────┘              └──────────────────────────────────────┘ │
+│                           │                                         │
+│          ┌────────────────┴──────────────┐                         │
+│          │ 1. JDBC                        │ 2. write-through        │
+│          │   (events+outbox+accounts, tx) │    {balance, 30 min TTL}│
+│          ▼                                ▼                         │
+│   ┌─────────────────┐          ┌──────────────┐                    │
+│   │  Aurora PgSQL   │          │ ElastiCache  │                    │
+│   │  events+outbox  │          │    Redis     │                    │
+│   └────────┬────────┘          │  (balance)   │                    │
+│            │                   └──────────────┘                    │
+│            │  3. EventBridge Scheduler                             │
 │            ▼                                                        │
-│   ┌──────────────────┐                                              │
-│   │  Lambda          │                                              │
-│   │  outbox-poller   │                                              │
-│   └────────┬─────────┘                                              │
-│            │ 4. publish                                             │
+│   ┌──────────────────┐                                             │
+│   │  Lambda          │                                             │
+│   │  outbox-poller   │                                             │
+│   └────────┬─────────┘                                             │
+│            │ 4. publish                                            │
 │            ▼                                                        │
-│      ┌──────────┐   ┌──────────────┐                                │
-│      │   SQS    │──▶│    Lambda    │                                │
-│      └──────────┘   │   Projector  │                                │
-│                     └──────┬───────┘                                │
-│                            │ 5. write                               │
+│      ┌──────────┐   ┌──────────────┐                               │
+│      │   SQS    │──▶│    Lambda    │                               │
+│      └──────────┘   │   Projector  │                               │
+│                     └──────┬───────┘                               │
+│                            │ 5. write                              │
 │                            ▼                                        │
-│                   ┌──────────────────┐                              │
-│                   │     DynamoDB     │                              │
-│                   │ BALANCE · STATE  │                              │
-│                   │ · TXNS#          │                              │
-│                   └──────────────────┘                              │
+│                   ┌──────────────────┐                             │
+│                   │     DynamoDB     │                             │
+│                   │ BALANCE · STATE  │                             │
+│                   │ · TXNS#          │                             │
+│                   └──────────────────┘                             │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Write ordering:** within a command, the API (1) commits `events + outbox` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
+**Write ordering:** within a command, the API (1) commits `events + outbox + accounts` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
 
 ---
 
@@ -70,6 +73,8 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 | Event fan-out | Transactional Outbox → SQS | Guarantees publication even if the API crashes after Aurora commit |
 | Concurrency control | Optimistic locking (version counter) | No distributed locks; contention surfaces as a 409, not silent data corruption |
 | Idempotency | Per-request UUID key stored in Aurora | Safe client retries; same key always returns the same response |
+| Authentication | Cognito M2M (Client Credentials / JWT) | Service-to-service API; JWT `sub` is the Cognito `client_id`, stored as `owner_id` |
+| Ownership enforcement | Spring `@PreAuthorize` + `AccountSecurityService` | Declarative, single bean, works uniformly for path params and request body |
 
 ---
 
@@ -78,11 +83,17 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 **Prerequisites:** Java 21, Docker, Terraform, Python 3.12 + `uv`
 
 ```bash
-# Start local infrastructure (Floci: SQS, DynamoDB, Lambda, RDS proxy)
+# Start local infrastructure (Floci: SQS, DynamoDB, Lambda, RDS proxy, Cognito)
 docker compose up -d
 
-# Full setup: apply Terraform, run DB migrations, build and push Lambda images
+# Full setup: apply Terraform (incl. Cognito), run DB migrations, build and push Lambda images
 bash terraform/scripts/local-bootstrap.sh
+
+# Get the Cognito pool ID created by Terraform
+cd terraform/envs/local && terraform output -raw user_pool_id
+
+# Export the JWK set URI so the API can validate tokens at startup
+export COGNITO_JWK_SET_URI=http://localhost:4566/<pool_id>/.well-known/jwks.json
 
 # Run the API
 cd api && ./gradlew bootRun
@@ -106,7 +117,11 @@ cd lambdas && uv run pytest
 
 ## Key Endpoints
 
-> All write endpoints require `Idempotency-Key: <uuid-v4>` and `X-User-Id: <uuid>` headers.
+> All write endpoints require:
+> - `Authorization: Bearer <jwt>` — Cognito M2M token (Client Credentials grant)
+> - `Idempotency-Key: <uuid-v4>` — safe retry guarantee
+>
+> Account mutations (deposit, withdraw, freeze, close) and transfers return `403` if the JWT `sub` does not match the account's owner. Opening an account registers the JWT `sub` as the permanent owner.
 
 | Method | Path | Description |
 |---|---|---|
@@ -132,7 +147,7 @@ cloud-ledger/
 │       │   ├── adapter/out/cache/  # Redis BalanceCache adapter
 │       │   ├── application/        # Command + CommandHandler per use case
 │       │   └── domain/             # Account aggregate, events, TransferPolicy
-│       └── shared/                 # EventBus, CommandBus, EventStore, JPA entities
+│       └── shared/                 # EventBus, CommandBus, EventStore, JPA entities, SecurityConfig
 ├── lambdas/                    # Python 3.12 (uv-managed)
 │   ├── shared/                 # db.py, sqs.py, dynamo.py connection factories
 │   ├── outbox_poller/          # polls outbox → SQS relay
@@ -143,7 +158,8 @@ cloud-ledger/
 │   │   ├── networking/         # VPC, subnets, security groups
 │   │   ├── messaging/          # SQS queue (cloudledger-events)
 │   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
-│   │   └── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler
+│   │   ├── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler
+│   │   └── auth/               # Cognito User Pool, Resource Server, M2M app client
 │   └── scripts/
 │       ├── local-bootstrap.sh  # full setup from scratch
 │       ├── local-destroy.sh    # full teardown
