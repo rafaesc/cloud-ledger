@@ -1,6 +1,7 @@
 package com.getcloudledger.api.shared.spring;
 
 import com.getcloudledger.api.account.domain.exception.AccountAccessDeniedException;
+import com.getcloudledger.api.account.domain.exception.AccountNotFoundException;
 import com.getcloudledger.api.account.domain.exception.InsufficientFundsException;
 import com.getcloudledger.api.account.domain.exception.TransferNotAllowedException;
 import org.springframework.http.HttpStatus;
@@ -28,5 +29,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TransferNotAllowedException.class)
     public ResponseEntity<Map<String, String>> handleTransferNotAllowed(TransferNotAllowedException e) {
         return ResponseEntity.status(422).body(Map.of("error", "transfer_not_allowed"));
+    }
+
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleAccountNotFound(AccountNotFoundException e) {
+        return ResponseEntity.status(404).body(Map.of("error", "account_not_found"));
     }
 }

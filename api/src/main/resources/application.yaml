@@ -42,6 +42,11 @@ spring:
     password: secret123
     driver-class-name: software.amazon.jdbc.Driver
 
+aws:
+  dynamodb:
+    endpoint-url: http://localhost:4566
+    table-name: cloudledger-projections
+
 management:
   endpoints:
     web:

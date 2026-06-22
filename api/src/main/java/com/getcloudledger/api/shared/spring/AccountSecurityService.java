@@ -18,4 +18,9 @@ public class AccountSecurityService {
         var jwt = (Jwt) auth.getPrincipal();
         return accountRegistryPort.isOwner(accountId.toString(), jwt.getSubject());
     }
+
+    public boolean isSelf(String ownerId, Authentication auth) {
+        var jwt = (Jwt) auth.getPrincipal();
+        return jwt.getSubject().equals(ownerId);
+    }
 }

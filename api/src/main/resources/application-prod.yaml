@@ -12,6 +12,10 @@ spring:
       ssl:
         enabled: true
 
+aws:
+  dynamodb:
+    table-name: ${DYNAMODB_TABLE_NAME:cloudledger-projections}
+
   datasource:
     url: jdbc:aws-wrapper:postgresql://${DB_CLUSTER_ENDPOINT}/${DB_NAME}
     username: ${DB_USERNAME}

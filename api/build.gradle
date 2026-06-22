@@ -51,6 +51,7 @@ dependencies {
 	implementation platform("software.amazon.awssdk:bom:2.32.10")
 	implementation "software.amazon.awssdk:rds"
 	implementation "software.amazon.awssdk:sqs"
+	implementation "software.amazon.awssdk:dynamodb"
 
 	implementation("software.amazon.jdbc:aws-advanced-jdbc-wrapper:4.0.1")
 	implementation("org.postgresql:postgresql:42.7.11")
