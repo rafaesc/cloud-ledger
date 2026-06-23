@@ -159,8 +159,11 @@ cloud-ledger/
 │   ├── outbox_poller/          # polls outbox → SQS relay
 │   └── projector/              # SQS consumer → DynamoDB writer
 ├── terraform/
-│   ├── envs/local/             # Floci-backed local environment (entry point)
+│   ├── envs/
+│   │   ├── local/              # Floci-backed local environment (local state)
+│   │   └── prod/               # Production environment (S3 remote backend + DynamoDB lock)
 │   ├── modules/
+│   │   ├── bootstrap/          # One-time: S3 state bucket + DynamoDB lock table
 │   │   ├── networking/         # VPC, subnets, security groups
 │   │   ├── messaging/          # KMS-encrypted SQS queue + DLQ
 │   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
@@ -172,6 +175,28 @@ cloud-ledger/
 │       └── local-import.sh     # recover orphaned resources into Terraform state
 └── README.md
 ```
+
+---
+
+## Deploying to Production
+
+Terraform state for prod is stored remotely in S3 with DynamoDB locking. Before the first `prod` apply, provision the backend once:
+
+```bash
+# Run once with real AWS credentials — creates the S3 bucket and DynamoDB lock table
+cd terraform/modules/bootstrap
+terraform init && terraform apply
+```
+
+Then deploy prod:
+
+```bash
+cd terraform/envs/prod
+terraform init                               # pulls state from S3
+TF_VAR_rds_password=<secret> terraform apply
+```
+
+After apply, build and push the API image to the prod ECR repository (`terraform output api_ecr_repository_url`), then trigger an ECS service update to roll in the new image.
 
 ---
 

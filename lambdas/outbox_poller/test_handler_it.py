@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Generator
 from datetime import datetime, timezone
 
 import boto3
@@ -58,7 +59,7 @@ def env_vars(pg_container: PostgresContainer, monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.fixture()
-def db_conn(pg_container: PostgresContainer) -> psycopg.Connection:
+def db_conn(pg_container: PostgresContainer) -> Generator[psycopg.Connection, None, None]:
     conn = _connect(pg_container)
     yield conn
     conn.execute("TRUNCATE cloudledger.outbox")
