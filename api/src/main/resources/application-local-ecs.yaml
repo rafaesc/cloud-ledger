@@ -20,3 +20,4 @@ aws:
   dynamodb:
     endpoint-url: ${DYNAMODB_ENDPOINT_URL:http://floci:4566}
     table-name: ${DYNAMODB_TABLE_NAME:cloudledger-projections}
+

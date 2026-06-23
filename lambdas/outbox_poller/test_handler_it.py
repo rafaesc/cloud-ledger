@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Generator
 from datetime import datetime, timezone
 
 import boto3
 import psycopg
 import pytest
 from moto import mock_aws
-from testcontainers.postgres import PostgresContainer
+from testcontainers.postgres import PostgresContainer  # type: ignore[import-untyped]
 
 from outbox_poller.handler import handler
 

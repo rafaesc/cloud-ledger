@@ -139,7 +139,7 @@ variable "aws_secret_access_key" {
     See aws_access_key_id for the full explanation.
     Empty in prod (task role); set to "test" in local (Floci limitation).
   EOT
-  type      = string
-  default   = ""
-  sensitive = true
+  type        = string
+  default     = ""
+  sensitive   = true
 }

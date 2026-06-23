@@ -1,5 +1,5 @@
 """
-Full E2E happy path: write side (API → Aurora → outbox) + async pipeline (outbox-poller → SQS → projector → DynamoDB).
+Full E2E happy path: write side (API → Aurora) + async pipeline (SQS → projector → DynamoDB).
 """
 from __future__ import annotations
 
@@ -122,46 +122,6 @@ class TestHappyPath:
             "TransferCredited",
             "AccountFrozen",
             "AccountClosed",
-        ]
-
-    def test_outbox_all_published(self, db: psycopg.Connection, happy_path_ids):
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            with db.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT COUNT(*) FROM outbox o
-                    JOIN events e USING (event_id)
-                    WHERE e.aggregate_id IN (%s, %s)
-                    AND o.published_at IS NULL
-                    """,
-                    (UUID(happy_path_ids["account1"]), UUID(happy_path_ids["account2"])),
-                )
-                unpublished = cur.fetchone()[0]
-            if unpublished == 0:
-                return
-            time.sleep(2)
-        pytest.fail(f"{unpublished} outbox row(s) still unpublished after 30s")
-
-    def test_outbox_balance_after_in_meta(self, db: psycopg.Connection, happy_path_ids):
-        with db.cursor() as cur:
-            cur.execute(
-                """
-                SELECT e.event_name, o.payload->'meta'->>'balance_after'
-                FROM outbox o JOIN events e USING (event_id)
-                WHERE e.aggregate_id IN (%s, %s)
-                  AND e.event_name IN ('MoneyDeposited','MoneyWithdrawn','TransferDebited','TransferCredited')
-                ORDER BY o.sequence_number
-                """,
-                (UUID(happy_path_ids["account1"]), UUID(happy_path_ids["account2"])),
-            )
-            rows = cur.fetchall()
-
-        assert rows == [
-            ("MoneyDeposited",   "500.00"),
-            ("MoneyWithdrawn",   "450.00"),
-            ("TransferDebited",  "350.00"),
-            ("TransferCredited", "100.00"),
         ]
 
     # ── DynamoDB projections (async — polls until projector catches up) ────────

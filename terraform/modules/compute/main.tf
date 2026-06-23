@@ -353,21 +353,21 @@ resource "aws_ecs_task_definition" "api" {
     }]
 
     environment = [
-      { name = "SPRING_PROFILES_ACTIVE",  value = var.spring_profiles_active },
-      { name = "DB_CLUSTER_ENDPOINT",     value = var.db_host },
-      { name = "DB_NAME",                 value = var.db_name },
-      { name = "DB_USERNAME",             value = var.db_user },
-      { name = "DB_PASSWORD",             value = var.db_password },
-      { name = "SQS_QUEUE_URL",           value = var.queue_url },
-      { name = "SQS_ENDPOINT_URL",        value = var.sqs_endpoint_url },
-      { name = "REDIS_HOST",              value = var.redis_host },
-      { name = "REDIS_PORT",              value = tostring(var.redis_port) },
-      { name = "DYNAMODB_ENDPOINT_URL",   value = var.dynamodb_endpoint_url },
-      { name = "DYNAMODB_TABLE_NAME",     value = var.dynamodb_table_name },
-      { name = "COGNITO_JWK_SET_URI",     value = var.cognito_jwk_set_uri },
-      { name = "AWS_ACCESS_KEY_ID",       value = var.aws_access_key_id },
-      { name = "AWS_SECRET_ACCESS_KEY",   value = var.aws_secret_access_key },
-      { name = "AWS_DEFAULT_REGION",      value = "us-east-1" },
+      { name = "SPRING_PROFILES_ACTIVE", value = var.spring_profiles_active },
+      { name = "DB_CLUSTER_ENDPOINT", value = var.db_host },
+      { name = "DB_NAME", value = var.db_name },
+      { name = "DB_USERNAME", value = var.db_user },
+      { name = "DB_PASSWORD", value = var.db_password },
+      { name = "SQS_QUEUE_URL", value = var.queue_url },
+      { name = "SQS_ENDPOINT_URL", value = var.sqs_endpoint_url },
+      { name = "REDIS_HOST", value = var.redis_host },
+      { name = "REDIS_PORT", value = tostring(var.redis_port) },
+      { name = "DYNAMODB_ENDPOINT_URL", value = var.dynamodb_endpoint_url },
+      { name = "DYNAMODB_TABLE_NAME", value = var.dynamodb_table_name },
+      { name = "COGNITO_JWK_SET_URI", value = var.cognito_jwk_set_uri },
+      { name = "AWS_ACCESS_KEY_ID", value = var.aws_access_key_id },
+      { name = "AWS_SECRET_ACCESS_KEY", value = var.aws_secret_access_key },
+      { name = "AWS_DEFAULT_REGION", value = "us-east-1" },
     ]
 
     logConfiguration = {

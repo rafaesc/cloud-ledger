@@ -32,3 +32,9 @@ variable "rds_password" {
   type      = string
   sensitive = true
 }
+
+variable "cmk_enabled" {
+  description = "Create and use customer-managed KMS keys for Aurora and DynamoDB. Disable for local environments."
+  type        = bool
+  default     = true
+}

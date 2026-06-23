@@ -8,20 +8,20 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    dynamodb        = "http://localhost:4566"
-    ec2             = "http://localhost:4566"
-    ecr             = "http://localhost:4566"
-    ecs             = "http://localhost:4566"
-    elasticache     = "http://localhost:4566"
+    dynamodb               = "http://localhost:4566"
+    ec2                    = "http://localhost:4566"
+    ecr                    = "http://localhost:4566"
+    ecs                    = "http://localhost:4566"
+    elasticache            = "http://localhost:4566"
     elasticloadbalancingv2 = "http://localhost:4566"
-    iam             = "http://localhost:4566"
-    kms             = "http://localhost:4566"
-    lambda          = "http://localhost:4566"
-    logs            = "http://localhost:4566"
-    rds             = "http://localhost:4566"
-    scheduler       = "http://localhost:4566"
-    sqs             = "http://localhost:4566"
-    cognitoidp      = "http://localhost:4566"
+    iam                    = "http://localhost:4566"
+    kms                    = "http://localhost:4566"
+    lambda                 = "http://localhost:4566"
+    logs                   = "http://localhost:4566"
+    rds                    = "http://localhost:4566"
+    scheduler              = "http://localhost:4566"
+    sqs                    = "http://localhost:4566"
+    cognitoidp             = "http://localhost:4566"
   }
 }
 
@@ -34,13 +34,15 @@ module "networking" {
 module "messaging" {
   source = "../../modules/messaging"
 
-  env = "local"
+  env         = "local"
+  cmk_enabled = false
 }
 
 module "storage" {
   source = "../../modules/storage"
 
   env                              = "local"
+  cmk_enabled                      = false
   subnet_ids                       = module.networking.private_subnet_ids
   rds_sg_id                        = module.networking.rds_sg_id
   elasticache_sg_id                = module.networking.elasticache_sg_id

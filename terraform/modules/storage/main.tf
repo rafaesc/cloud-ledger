@@ -1,3 +1,35 @@
+# ── KMS CMKs ─────────────────────────────────────────────────────────────────
+
+resource "aws_kms_key" "aurora" {
+  count                   = var.cmk_enabled ? 1 : 0
+  description             = "cloudledger/${var.env} Aurora CMK"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = { Name = "cloudledger-aurora-${var.env}", Project = "cloud-ledger" }
+}
+
+resource "aws_kms_alias" "aurora" {
+  count         = var.cmk_enabled ? 1 : 0
+  name          = "alias/cloudledger-aurora-${var.env}"
+  target_key_id = aws_kms_key.aurora[0].key_id
+}
+
+resource "aws_kms_key" "dynamodb" {
+  count                   = var.cmk_enabled ? 1 : 0
+  description             = "cloudledger/${var.env} DynamoDB CMK"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = { Name = "cloudledger-dynamodb-${var.env}", Project = "cloud-ledger" }
+}
+
+resource "aws_kms_alias" "dynamodb" {
+  count         = var.cmk_enabled ? 1 : 0
+  name          = "alias/cloudledger-dynamodb-${var.env}"
+  target_key_id = aws_kms_key.dynamodb[0].key_id
+}
+
 # ── Aurora PostgreSQL ─────────────────────────────────────────────────────────
 
 resource "aws_db_subnet_group" "main" {
@@ -17,6 +49,8 @@ resource "aws_rds_cluster" "main" {
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.rds_sg_id]
   skip_final_snapshot    = true
+  storage_encrypted      = var.cmk_enabled
+  kms_key_id             = var.cmk_enabled ? aws_kms_key.aurora[0].arn : null
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
@@ -88,7 +122,10 @@ resource "aws_dynamodb_table" "projections" {
     non_key_attributes = ["status", "currency", "opened_at"]
   }
 
-  server_side_encryption { enabled = true }
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = var.cmk_enabled ? aws_kms_key.dynamodb[0].arn : null
+  }
   point_in_time_recovery { enabled = true }
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }

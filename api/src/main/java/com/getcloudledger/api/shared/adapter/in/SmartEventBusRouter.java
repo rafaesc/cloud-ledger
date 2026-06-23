@@ -37,7 +37,11 @@ public class SmartEventBusRouter implements EventBus {
     public void publish(String aggregateType, List<? extends BaseEvent> events) {
         // Serialize inside the transaction so payloads capture enricher-stamped meta
         // (e.g. balance_after) at the moment the aggregate state is consistent.
-        var outboxRows = events.stream()
+        // Snapshot the event list: the caller's aggregate clears its internal list on
+        // markChangesAsCommitted(), which fires before afterCommit(). Without a copy,
+        // afterCommit() would see an empty list.
+        var snapshot = List.copyOf(events);
+        var outboxRows = snapshot.stream()
                 .map(e -> new OutboxEntity(
                         e.getEventId(),
                         DomainEventJsonSerializer.serialize((DomainEvent) e),
@@ -48,8 +52,8 @@ public class SmartEventBusRouter implements EventBus {
             @Override
             public void afterCommit() {
                 try {
-                    sqsEventBus.publish(aggregateType, events);
-                    log.debug("Published {} event(s) to SQS for aggregateType={}", events.size(), aggregateType);
+                    sqsEventBus.publish(aggregateType, snapshot);
+                    log.debug("Published {} event(s) to SQS for aggregateType={}", snapshot.size(), aggregateType);
                 } catch (Exception ex) {
                     log.warn("SQS publish failed for aggregateType={}, writing {} row(s) to outbox",
                             aggregateType, outboxRows.size(), ex);
