@@ -183,6 +183,22 @@ def handle_balance_event(data: dict[str, Any], meta: dict[str, Any]) -> None:
     except client.exceptions.ConditionalCheckFailedException:
         logger.info("Skipping stale balance event version=%s account=%s", version, account_id)
 
+    # Advance STATE.version so GET /account always reflects the latest aggregate version
+    try:
+        client.update_item(
+            TableName=table,
+            Key={
+                "PK": {"S": f"ACCOUNT#{account_id}"},
+                "SK": {"S": "STATE"},
+            },
+            UpdateExpression="SET #v = :v",
+            ConditionExpression="attribute_not_exists(#v) OR #v < :v",
+            ExpressionAttributeNames={"#v": "version"},
+            ExpressionAttributeValues={":v": {"N": str(version)}},
+        )
+    except client.exceptions.ConditionalCheckFailedException:
+        pass
+
 
 def handle_txn_event(event_type: str, data: dict[str, Any]) -> None:
     attrs = data["attributes"]

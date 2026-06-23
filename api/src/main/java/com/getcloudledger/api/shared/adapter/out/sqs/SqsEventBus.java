@@ -32,11 +32,15 @@ public class SqsEventBus implements EventBus {
                 log.warn("Skipping non-DomainEvent in SQS publish: {}", event.getClass().getSimpleName());
                 continue;
             }
+            String body = DomainEventJsonSerializer.serialize(domainEvent);
+            log.info("Sending event to SQS: type={} eventId={}",
+                    domainEvent.getClass().getSimpleName(), domainEvent.getEventId());
             sqsClient.sendMessage(SendMessageRequest.builder()
                     .queueUrl(queueUrl)
-                    .messageBody(DomainEventJsonSerializer.serialize(domainEvent))
+                    .messageBody(body)
                     .build());
-            log.debug("Published event {} ({}) to SQS", domainEvent.getEventId(), domainEvent.getClass().getSimpleName());
+            log.info("Event sent to SQS successfully: type={} eventId={}",
+                    domainEvent.getClass().getSimpleName(), domainEvent.getEventId());
         }
     }
 }

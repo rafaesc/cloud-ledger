@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Generator
 from datetime import datetime, timezone
 
 import boto3

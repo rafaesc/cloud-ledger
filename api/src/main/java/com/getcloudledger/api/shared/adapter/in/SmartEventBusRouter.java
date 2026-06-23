@@ -48,12 +48,16 @@ public class SmartEventBusRouter implements EventBus {
                         e.getSequenceNumber()))
                 .toList();
 
+        log.info("Registering afterCommit SQS sync for aggregateType={} events={}", aggregateType, snapshot.size());
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                log.info("afterCommit: attempting SQS publish for aggregateType={} events={}",
+                        aggregateType, snapshot.size());
                 try {
                     sqsEventBus.publish(aggregateType, snapshot);
-                    log.debug("Published {} event(s) to SQS for aggregateType={}", snapshot.size(), aggregateType);
+                    log.info("SQS publish succeeded for aggregateType={} events={}",
+                            aggregateType, snapshot.size());
                 } catch (Exception ex) {
                     log.warn("SQS publish failed for aggregateType={}, writing {} row(s) to outbox",
                             aggregateType, outboxRows.size(), ex);

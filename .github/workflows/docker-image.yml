@@ -51,7 +51,8 @@ jobs:
             -target=module.networking \
             -target=module.messaging \
             -target=module.storage \
-            -target=module.auth
+            -target=module.auth.aws_cognito_user_pool.main \
+            -target=module.auth.aws_cognito_resource_server.api
 
       - name: Wait for RDS proxy port
         run: |

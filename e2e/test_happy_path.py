@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 import uuid
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -37,6 +38,35 @@ def _poll_dynamo(dynamo, table: str, pk: str, sk: str, timeout: int = 60) -> dic
             return item
         time.sleep(2)
     pytest.fail(f"DynamoDB item PK={pk} SK={sk} not found within {timeout}s")
+
+
+def _poll_dynamo_attr(
+    dynamo: Any, table: Any, pk: str, sk: str, attr: str, expected: str, timeout: int = 60
+) -> dict:
+    """Poll until item[attr] equals expected (comparing N/S string values)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        item = _dynamo_item(dynamo, table, pk, sk)
+        if item:
+            val = item.get(attr, {})
+            if val.get("N") == expected or val.get("S") == expected:
+                return item
+        time.sleep(2)
+    pytest.fail(f"DynamoDB {pk}/{sk}[{attr}]={expected!r} not seen within {timeout}s")
+
+
+def _poll_dynamo_txns(dynamo: Any, table: Any, pk: str, expected_count: int, timeout: int = 60) -> list:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        resp = dynamo.query(
+            TableName=table,
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :prefix)",
+            ExpressionAttributeValues={":pk": {"S": pk}, ":prefix": {"S": "TXNS#"}},
+        )
+        if len(resp["Items"]) >= expected_count:
+            return resp["Items"]
+        time.sleep(2)
+    pytest.fail(f"Expected {expected_count} TXNS# items for {pk}, timed out after {timeout}s")
 
 
 class TestHappyPath:
@@ -128,8 +158,7 @@ class TestHappyPath:
 
     def test_dynamo_account1_balance(self, dynamo, dynamo_table, happy_path_ids):
         pk = f"ACCOUNT#{happy_path_ids['account1']}"
-        item = _poll_dynamo(dynamo, dynamo_table, pk, "BALANCE")
-        assert item["balance_cents"]["N"] == "35000"   # $350.00
+        _poll_dynamo_attr(dynamo, dynamo_table, pk, "BALANCE", "balance_cents", "35000")
 
     def test_dynamo_account1_state(self, dynamo, dynamo_table, happy_path_ids):
         pk = f"ACCOUNT#{happy_path_ids['account1']}"
@@ -138,22 +167,13 @@ class TestHappyPath:
 
     def test_dynamo_account1_txns(self, dynamo, dynamo_table, happy_path_ids):
         pk = f"ACCOUNT#{happy_path_ids['account1']}"
-        resp = dynamo.query(
-            TableName=dynamo_table,
-            KeyConditionExpression="PK = :pk AND begins_with(SK, :prefix)",
-            ExpressionAttributeValues={
-                ":pk": {"S": pk},
-                ":prefix": {"S": "TXNS#"},
-            },
-        )
-        assert len(resp["Items"]) == 3  # deposit, withdraw, transfer debit
+        items = _poll_dynamo_txns(dynamo, dynamo_table, pk, expected_count=3)
+        assert len(items) == 3  # deposit, withdraw, transfer debit
 
     def test_dynamo_account2_balance(self, dynamo, dynamo_table, happy_path_ids):
         pk = f"ACCOUNT#{happy_path_ids['account2']}"
-        item = _poll_dynamo(dynamo, dynamo_table, pk, "BALANCE")
-        assert item["balance_cents"]["N"] == "10000"   # $100.00
+        _poll_dynamo_attr(dynamo, dynamo_table, pk, "BALANCE", "balance_cents", "10000")
 
     def test_dynamo_account2_state(self, dynamo, dynamo_table, happy_path_ids):
         pk = f"ACCOUNT#{happy_path_ids['account2']}"
-        item = _poll_dynamo(dynamo, dynamo_table, pk, "STATE")
-        assert item["status"]["S"] == "CLOSED"
+        _poll_dynamo_attr(dynamo, dynamo_table, pk, "STATE", "status", "CLOSED")
