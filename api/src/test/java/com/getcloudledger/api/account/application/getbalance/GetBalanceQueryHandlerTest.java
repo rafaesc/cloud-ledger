@@ -3,6 +3,7 @@ package com.getcloudledger.api.account.application.getbalance;
 import com.getcloudledger.api.account.domain.exception.AccountNotFoundException;
 import com.getcloudledger.api.account.domain.port.out.AccountProjectionPort;
 import com.getcloudledger.api.account.domain.port.out.BalanceCache;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,8 @@ class GetBalanceQueryHandlerTest {
 
     private final AccountProjectionPort projectionPort = mock(AccountProjectionPort.class);
     private final BalanceCache balanceCache = mock(BalanceCache.class);
-    private final GetBalanceQueryHandler handler = new GetBalanceQueryHandler(projectionPort, balanceCache);
+    private final CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("test");
+    private final GetBalanceQueryHandler handler = new GetBalanceQueryHandler(projectionPort, balanceCache, circuitBreaker);
 
     @Test
     @DisplayName("handle | uses Redis balance when cache hit, metadata from DynamoDB")
@@ -66,5 +68,20 @@ class GetBalanceQueryHandlerTest {
 
         assertThrows(AccountNotFoundException.class,
                 () -> handler.handle(new GetBalanceQuery(accountId)));
+    }
+
+    @Test
+    @DisplayName("handle | falls back to DynamoDB balance when Redis throws")
+    void handle_falls_back_to_dynamo_when_redis_throws() {
+        var accountId = UUID.randomUUID();
+        var balanceView = new AccountProjectionPort.AccountBalanceView(
+                accountId.toString(), 200_00L, "USD", 2L, "2026-06-11T10:00:00.000Z"
+        );
+        when(projectionPort.findAccountBalance(accountId)).thenReturn(balanceView);
+        when(balanceCache.get(accountId)).thenThrow(new RuntimeException("Redis connection refused"));
+
+        var response = handler.handle(new GetBalanceQuery(accountId));
+
+        assertEquals(200_00L, response.balanceCents());
     }
 }

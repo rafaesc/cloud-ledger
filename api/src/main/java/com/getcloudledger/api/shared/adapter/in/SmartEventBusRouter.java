@@ -11,10 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 
@@ -25,22 +28,42 @@ import java.util.List;
 public class SmartEventBusRouter implements EventBus {
 
     private final JpaOutboxRepository outboxRepository;
+    private final PlatformTransactionManager transactionManager;
     @Qualifier("sqs")
     private final EventBus sqsEventBus;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void publish(String aggregateType, List<? extends BaseEvent> events) {
-        for (var event : events) {
-            var payload = DomainEventJsonSerializer.serialize((DomainEvent) event);
-            outboxRepository.save(new OutboxEntity(event.getEventId(), payload, event.getSequenceNumber()));
-        }
-        log.debug("Wrote {} outbox row(s) for aggregateType={}", events.size(), aggregateType);
+        // Serialize inside the transaction so payloads capture enricher-stamped meta
+        // (e.g. balance_after) at the moment the aggregate state is consistent.
+        var outboxRows = events.stream()
+                .map(e -> new OutboxEntity(
+                        e.getEventId(),
+                        DomainEventJsonSerializer.serialize((DomainEvent) e),
+                        e.getSequenceNumber()))
+                .toList();
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                sqsEventBus.publish(aggregateType, events);
+                try {
+                    sqsEventBus.publish(aggregateType, events);
+                    log.debug("Published {} event(s) to SQS for aggregateType={}", events.size(), aggregateType);
+                } catch (Exception ex) {
+                    log.warn("SQS publish failed for aggregateType={}, writing {} row(s) to outbox",
+                            aggregateType, outboxRows.size(), ex);
+                    // REQUIRES_NEW is mandatory here: the committed JPA session is still
+                    // bound to the thread during afterCommit(). REQUIRED would join that
+                    // dead session and silently discard writes. REQUIRES_NEW suspends it
+                    // first, opens a genuinely fresh connection, then resumes on exit.
+                    var fallbackTx = new TransactionTemplate(transactionManager);
+                    fallbackTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                    fallbackTx.execute(status -> {
+                        outboxRepository.saveAll(outboxRows);
+                        return null;
+                    });
+                }
             }
         });
     }

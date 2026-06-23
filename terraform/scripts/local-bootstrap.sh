@@ -10,6 +10,7 @@ export AWS_ENDPOINT_URL=http://localhost:4566
 
 OUTBOX_REPO=localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller
 PROJECTOR_REPO=localhost:5100/000000000000/us-east-1/cloudledger/projector
+API_REPO=localhost:5100/000000000000/us-east-1/cloudledger/api
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -42,6 +43,14 @@ docker build \
 
 echo "==> Pushing projector image to Floci ECR..."
 docker push "$PROJECTOR_REPO:latest"
+
+echo "==> Building API image..."
+docker build \
+  -t "$API_REPO:latest" \
+  "$REPO_ROOT/api"
+
+echo "==> Pushing API image to Floci ECR..."
+docker push "$API_REPO:latest"
 
 echo "==> Running Flyway migrations..."
 cd "$REPO_ROOT/api"

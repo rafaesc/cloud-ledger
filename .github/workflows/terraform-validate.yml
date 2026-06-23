@@ -10,19 +10,23 @@ on:
     paths:
       - 'terraform/**'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
         working-directory: terraform/envs/local
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
 
       - name: Init
         run: terraform init -input=false -backend=false
@@ -30,5 +34,13 @@ jobs:
       - name: Format check
         run: terraform fmt -check -recursive ../../
 
-      - name: Validate
+      - name: Validate local env
         run: terraform validate
+
+      - name: Validate modules
+        run: |
+          for module in ../../modules/*/; do
+            echo "Validating $module"
+            terraform -chdir="$module" init -input=false -backend=false
+            terraform -chdir="$module" validate
+          done

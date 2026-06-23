@@ -19,48 +19,52 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│ CloudLedger                                                         │
-│                                                                     │
-│  ┌─────────┐  JWT (M2M)   ┌──────────────────────────────────────┐ │
-│  │ Cognito │◀─────────────│  Spring Boot 4.1 API  (ECS Fargate)  │ │
-│  │  (auth) │─ validates ─▶│  command handlers · JWT · idempotency│ │
-│  └─────────┘              └──────────────────────────────────────┘ │
-│                           │                                         │
-│          ┌────────────────┴──────────────┐                         │
-│          │ 1. JDBC                        │ 2. write-through        │
-│          │   (events+outbox+accounts, tx) │    {balance, 30 min TTL}│
-│          ▼                                ▼                         │
-│   ┌─────────────────┐          ┌──────────────┐                    │
-│   │  Aurora PgSQL   │          │ ElastiCache  │                    │
-│   │  events+outbox  │          │    Redis     │                    │
-│   └────────┬────────┘          │  (balance)   │                    │
-│            │                   └──────────────┘                    │
-│            │  3. EventBridge Scheduler                             │
-│            ▼                                                        │
-│   ┌──────────────────┐                                             │
-│   │  Lambda          │                                             │
-│   │  outbox-poller   │                                             │
-│   └────────┬─────────┘                                             │
-│            │ 4. publish                                            │
-│            ▼                                                        │
-│      ┌──────────┐   ┌──────────────┐                               │
-│      │   SQS    │──▶│    Lambda    │                               │
-│      └──────────┘   │   Projector  │                               │
-│                     └──────┬───────┘                               │
-│                            │ 5. write                              │
-│                            ▼                                        │
-│                   ┌──────────────────┐                             │
-│                   │     DynamoDB     │                             │
-│                   │ BALANCE · STATE  │                             │
-│                   │ · TXNS#          │                             │
-│                   └──────────────────┘                             │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  CloudLedger                                                              │
+│                                                                           │
+│  Client ──HTTP──▶ ALB ──── ① Bearer JWT ────▶ Cognito (validate)        │
+│                    │                                                      │
+│                    ▼                                                      │
+│            ┌────────────────────────────────────────────────────────┐   │
+│            │  Spring Boot 4.1 API  (ECS Fargate)                    │   │
+│            │  command/query handlers  ·  idempotency filter          │   │
+│            └───────────┬────────────────────────────┬───────────────┘   │
+│                        │                              │                   │
+│          ② JDBC events+accounts (atomic)   ③ publish to SQS after commit│
+│             + write-through balance (30 min)          │                   │
+│                        │                              ▼                   │
+│                        ▼                    ┌────────────────────────┐   │
+│             ┌───────────────────────┐       │  SQS  (KMS-encrypted)  │   │
+│             │  Aurora PostgreSQL     │       │  DLQ  after 5 retries  │   │
+│             │  events · accounts    │       └───────────┬────────────┘   │
+│             │  outbox †             │                   │ ④ consume       │
+│             └───────────────────────┘                   ▼                 │
+│             ┌───────────────────────┐       ┌────────────────────────┐   │
+│             │  ElastiCache Redis    │       │  projector λ            │   │
+│             │  balance (30 min TTL) │       └───────────┬────────────┘   │
+│             └───────────────────────┘                   │ ⑤ write         │
+│                                                          ▼                 │
+│                                             ┌────────────────────────┐   │
+│                                             │  DynamoDB               │   │
+│                                             │  STATE · BALANCE · TXNS#│   │
+│                                             │  GSI: OWNER# → accounts │   │
+│                                             └────────────────────────┘   │
+│                                                                           │
+│  † if SQS publish fails: outbox rows written (REQUIRES_NEW);             │
+│    EventBridge triggers outbox-poller λ to relay them to SQS             │
+│                                                                           │
+│  ── READ PATH ────────────────────────────────────────────────────────   │
+│  GET /balance       Redis ──(circuit breaker / miss)──▶ DynamoDB         │
+│  GET /account       DynamoDB  STATE                                       │
+│  GET /transactions  DynamoDB  TXNS#  (cursor, asc / desc)                 │
+│  GET /accounts      DynamoDB  GSI    (by owner_id)                        │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Write ordering:** within a command, the API (1) commits `events + outbox + accounts` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately. An EventBridge Scheduler then triggers the (3) **outbox-poller Lambda**, which polls `cloudledger.outbox WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED` and (4) publishes each event to SQS. The (5) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
+**Write ordering:** within a command, the API (1) commits `events + accounts` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately, and (3) publishes events **directly to SQS** after the Aurora commit. If SQS is unavailable, a fallback path writes outbox rows in a separate `REQUIRES_NEW` transaction; the **outbox-poller Lambda** (triggered by EventBridge Scheduler every ~5 seconds) then relays those rows to SQS. Either way, the (4) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
+
+**Read path:** `GET /balance` hits Redis first; if Redis is unavailable or the circuit breaker (Resilience4j, 50 % failure threshold, 30 s open window) trips, the handler falls through to DynamoDB automatically. All other read endpoints (`GET /account`, `GET /transactions`, list by owner) go directly to DynamoDB. Aurora is never queried on the read path.
 
 ---
 
@@ -69,8 +73,8 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 | Decision | Choice | Why |
 |---|---|---|
 | Event store | Aurora PostgreSQL (ACID) | Optimistic lock + event insert must be one atomic transaction |
-| Read model | DynamoDB + Redis | Sub-10ms balance reads; Redis hot path (30 min TTL), DynamoDB for durable projection |
-| Event fan-out | Transactional Outbox → SQS | Guarantees publication even if the API crashes after Aurora commit |
+| Read model | DynamoDB + Redis + Resilience4j circuit breaker | Sub-10ms balance reads; Redis hot path (30 min TTL), automatic DynamoDB fallback if Redis degrades |
+| Event fan-out | SQS-first (KMS-encrypted, DLQ after 5 retries) + transactional outbox fallback | Direct SQS publish after commit; outbox relay only if SQS is unavailable; DLQ catches poison-pill events |
 | Concurrency control | Optimistic locking (version counter) | No distributed locks; contention surfaces as a 409, not silent data corruption |
 | Idempotency | Per-request UUID key stored in Aurora | Safe client retries; same key always returns the same response |
 | Authentication | Cognito M2M (Client Credentials / JWT) | Service-to-service API; JWT `sub` is the Cognito `client_id`, stored as `owner_id` |
@@ -90,7 +94,7 @@ docker compose up -d
 bash terraform/scripts/local-bootstrap.sh
 
 # Get the Cognito pool ID created by Terraform
-cd terraform/envs/local && terraform output -raw user_pool_id
+cd terraform/envs/local && terraform output -raw cognito_pool_id
 
 # Export the JWK set URI so the API can validate tokens at startup
 export COGNITO_JWK_SET_URI=http://localhost:4566/<pool_id>/.well-known/jwks.json
@@ -131,8 +135,10 @@ cd lambdas && uv run pytest
 | `POST` | `/v1/transfers` | Transfer between accounts — body: `{sourceAccountId, destinationAccountId, amount, transferId}` |
 | `POST` | `/v1/accounts/{accountId}/freeze` | Freeze an account |
 | `POST` | `/v1/accounts/{accountId}/close` | Close an account |
-
-> Read endpoints (`GET /balance`, `GET /transactions`, etc.) are planned but not yet implemented.
+| `GET` | `/v1/accounts/{accountId}` | Account state (status, currency, owner) from DynamoDB |
+| `GET` | `/v1/accounts/{accountId}/balance` | Current balance — Redis hot path → DynamoDB fallback |
+| `GET` | `/v1/accounts/{accountId}/transactions` | Paginated transaction history — params: `limit` (default 50, max 200), `cursor` (opaque, base64), `order` (`desc`/`asc`) |
+| `GET` | `/v1/accounts` | List accounts by owner — param: `owner_id` (must match JWT `sub`) |
 
 ---
 
@@ -156,9 +162,9 @@ cloud-ledger/
 │   ├── envs/local/             # Floci-backed local environment (entry point)
 │   ├── modules/
 │   │   ├── networking/         # VPC, subnets, security groups
-│   │   ├── messaging/          # SQS queue (cloudledger-events)
+│   │   ├── messaging/          # KMS-encrypted SQS queue + DLQ
 │   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
-│   │   ├── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler
+│   │   ├── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler, ECS Fargate, ALB
 │   │   └── auth/               # Cognito User Pool, Resource Server, M2M app client
 │   └── scripts/
 │       ├── local-bootstrap.sh  # full setup from scratch
@@ -180,4 +186,4 @@ Make a deposit with an `Idempotency-Key`. Replay the exact same request with the
 Fire two transfers from the same account simultaneously. One lands first and advances the account version. The second receives `409 Conflict`. The client re-reads, retries with the updated version, and the transfer succeeds. Final balance is exactly correct — money is neither lost nor created.
 
 **3. Async CQRS projection demo**
-Issue a transfer. The command commits to Aurora and immediately write-throughs the new balance to Redis. Within ~5 seconds (configurable EventBridge tick), the outbox poller publishes to SQS and the projector Lambda writes the durable `BALANCE` and `TXNS#` items to DynamoDB — providing the eventual read model for future balance and transaction history queries.
+Issue a transfer. The command commits to Aurora, immediately write-throughs the new balance to Redis, and publishes the events directly to SQS (no outbox delay on the happy path). The projector Lambda consumes SQS within seconds and writes the durable `BALANCE` and `TXNS#` items to DynamoDB. `GET /balance` returns instantly from Redis. `GET /transactions` returns the new entry once the projector has caught up — no Aurora replay required.

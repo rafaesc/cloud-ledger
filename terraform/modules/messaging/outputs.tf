@@ -5,3 +5,11 @@ output "queue_url" {
 output "queue_arn" {
   value = aws_sqs_queue.main.arn
 }
+
+output "dlq_url" {
+  value = aws_sqs_queue.event_dlq.url
+}
+
+output "dlq_arn" {
+  value = aws_sqs_queue.event_dlq.arn
+}

@@ -45,6 +45,7 @@ build/
 **/.terraform/
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 *.tfplan
 crash.log
 override.tf

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import uuid
@@ -15,35 +14,27 @@ import requests
 _TERRAFORM_LOCAL = Path(__file__).parent.parent / "terraform" / "envs" / "local"
 
 
-def _tf_state_attr(module: str, resource_type: str, attribute: str) -> str:
+def _tf_output(name: str) -> str:
     result = subprocess.run(
-        ["terraform", "state", "pull"],
+        ["terraform", "output", "-raw", name],
         cwd=_TERRAFORM_LOCAL,
         capture_output=True,
         text=True,
         check=True,
     )
-    state = json.loads(result.stdout)
-    for resource in state["resources"]:
-        if resource.get("module") == module and resource["type"] == resource_type:
-            return resource["instances"][0]["attributes"][attribute]
-    raise ValueError(f"{module}.{resource_type}.{attribute} not found in terraform state")
+    return result.stdout.strip()
 
 
 @pytest.fixture(scope="session")
 def api_url() -> str:
-    return os.getenv("E2E_API_URL", "http://localhost:8080")
+    return os.getenv("E2E_API_URL", "http://localhost")
 
 
 @pytest.fixture(scope="session")
 def api_token() -> str:
     token_url = os.getenv("E2E_TOKEN_URL", "http://localhost:4566/cognito-idp/oauth2/token")
-    client_id = os.getenv("E2E_CLIENT_ID") or _tf_state_attr(
-        "module.auth", "aws_cognito_user_pool_client", "id"
-    )
-    client_secret = os.getenv("E2E_CLIENT_SECRET") or _tf_state_attr(
-        "module.auth", "aws_cognito_user_pool_client", "client_secret"
-    )
+    client_id = os.getenv("E2E_CLIENT_ID") or _tf_output("cognito_client_id")
+    client_secret = os.getenv("E2E_CLIENT_SECRET") or _tf_output("cognito_client_secret")
     resp = requests.post(
         token_url,
         data={

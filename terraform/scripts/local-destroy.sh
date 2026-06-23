@@ -10,8 +10,21 @@ export AWS_DEFAULT_REGION=us-east-1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-echo "==> Destroying Terraform-managed infrastructure..."
 cd "$REPO_ROOT/terraform/envs/local"
+
+# Floci returns HTTP 200 for DeleteListener and DeleteLoadBalancer but with a malformed
+# XML body — Terraform can't parse the response and fails even though the deletes succeed.
+# Floci also deletes RDS instances asynchronously, so DeleteDBCluster fires before the
+# instance is truly gone. All of these get wiped by docker compose down + rm -rf data,
+# so removing them from state before destroy is safe and avoids the spurious errors.
+echo "==> Removing Floci-incompatible resources from Terraform state..."
+terraform state rm 'module.compute.aws_lb_listener.http'           2>/dev/null || true
+terraform state rm 'module.compute.aws_lb_target_group.api'        2>/dev/null || true
+terraform state rm 'module.compute.aws_lb.main'                    2>/dev/null || true
+terraform state rm 'module.storage.aws_rds_cluster_instance.writer' 2>/dev/null || true
+terraform state rm 'module.storage.aws_rds_cluster.main'           2>/dev/null || true
+
+echo "==> Destroying Terraform-managed infrastructure..."
 terraform destroy -input=false -auto-approve
 
 echo "==> Stopping Floci..."

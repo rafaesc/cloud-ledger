@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -61,8 +62,8 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     private EventBus sqsEventBus;
 
     @Test
-    @DisplayName("saveEvents | persists events and outbox rows in the same transaction and publishes to SQS after commit")
-    void saveEvents_persistsEventsAndOutboxAndPublishesAfterCommit() {
+    @DisplayName("saveEvents | on SQS success: persists events, publishes to SQS after commit, writes no outbox rows")
+    void saveEvents_persistsEventsAndPublishesToSqsWithNoOutboxOnSuccess() {
         var aggregateId = UUID.randomUUID();
         var ownerId = UUID.randomUUID();
         var events = List.of(
@@ -76,19 +77,19 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
         assertEquals(0, storedEvents.get(0).getVersion());
         assertEquals(1, storedEvents.get(1).getVersion());
 
-        var outboxRows = outboxRowsFor(events);
-        assertEquals(2, outboxRows.size(), "one outbox row must accompany each event");
+        assertEquals(0, outboxRowsFor(events).size(), "no outbox row written when SQS succeeds");
 
         verify(sqsEventBus, timeout(2000)).publish(eq(ACCOUNT), any());
     }
 
     @Test
-    @DisplayName("saveEvents | each outbox row carries the event sequence_number and stays unpublished")
+    @DisplayName("saveEvents | on SQS failure: each outbox row carries the event sequence_number and stays unpublished")
     void saveEvents_outboxCarriesSequenceNumberAndIsUnpublished() {
         var aggregateId = UUID.randomUUID();
         var ownerId = UUID.randomUUID();
         var events = List.of(opened(aggregateId, ownerId, "EUR"));
 
+        doThrow(new RuntimeException("SQS unavailable")).when(sqsEventBus).publish(any(), any());
         inTransaction(() -> eventStore.saveEvents(aggregateId, ACCOUNT, events, -1));
 
         var storedEvent = storedEvents(aggregateId).getFirst();
@@ -102,13 +103,14 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("saveEvents | outbox payload is the SQS wire format carrying dynamic attributes, while the event-store payload stays pure")
+    @DisplayName("saveEvents | on SQS failure: outbox payload is the SQS wire format carrying dynamic attributes, while the event-store payload stays pure")
     void saveEvents_outboxPayloadCarriesDynamicAttributesEventStoreDoesNot() {
         var aggregateId = UUID.randomUUID();
         var ownerId = UUID.randomUUID();
         var deposited = deposited(aggregateId, ownerId, "100.00");
         deposited.putDynamicAttribute("balance_after", "100.00");
 
+        doThrow(new RuntimeException("SQS unavailable")).when(sqsEventBus).publish(any(), any());
         inTransaction(() -> eventStore.saveEvents(aggregateId, ACCOUNT, List.of(deposited), -1));
 
         var storedEvent = storedEvents(aggregateId).getFirst();

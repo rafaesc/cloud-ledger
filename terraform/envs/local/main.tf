@@ -8,16 +8,20 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    dynamodb    = "http://localhost:4566"
-    ec2         = "http://localhost:4566"
-    ecr         = "http://localhost:4566"
-    elasticache = "http://localhost:4566"
-    iam         = "http://localhost:4566"
-    lambda      = "http://localhost:4566"
-    rds         = "http://localhost:4566"
-    scheduler   = "http://localhost:4566"
-    sqs         = "http://localhost:4566"
-    cognitoidp  = "http://localhost:4566"
+    dynamodb        = "http://localhost:4566"
+    ec2             = "http://localhost:4566"
+    ecr             = "http://localhost:4566"
+    ecs             = "http://localhost:4566"
+    elasticache     = "http://localhost:4566"
+    elasticloadbalancingv2 = "http://localhost:4566"
+    iam             = "http://localhost:4566"
+    kms             = "http://localhost:4566"
+    lambda          = "http://localhost:4566"
+    logs            = "http://localhost:4566"
+    rds             = "http://localhost:4566"
+    scheduler       = "http://localhost:4566"
+    sqs             = "http://localhost:4566"
+    cognitoidp      = "http://localhost:4566"
   }
 }
 
@@ -60,6 +64,18 @@ module "compute" {
   sqs_endpoint_url      = "http://floci:4566"
   dynamodb_table_name   = module.storage.dynamodb_table_name
   dynamodb_endpoint_url = "http://floci:4566"
+
+  # ECS + ALB
+  vpc_id                 = module.networking.vpc_id
+  public_subnet_ids      = module.networking.public_subnet_ids
+  alb_sg_id              = module.networking.alb_sg_id
+  ecs_sg_id              = module.networking.ecs_sg_id
+  redis_host             = "floci-valkey-cloudledger-local" # Docker container name, not the host-mapped port
+  redis_port             = 6379                             # internal container port, not 7379
+  cognito_jwk_set_uri    = "http://floci:4566/${module.auth.user_pool_id}/.well-known/jwks.json"
+  spring_profiles_active = "local-ecs"
+  aws_access_key_id      = "test"
+  aws_secret_access_key  = "test"
 }
 
 module "auth" {

@@ -33,6 +33,7 @@ resource "aws_subnet" "public" {
   tags = { Name = "cloudledger-${var.env}-public-${count.index + 1}", Project = "cloud-ledger" }
 }
 
+# Lambda security group — accesss to internet
 resource "aws_security_group" "lambda" {
   name   = "cloudledger-${var.env}-lambda"
   vpc_id = aws_vpc.main.id
@@ -47,7 +48,61 @@ resource "aws_security_group" "lambda" {
   tags = { Name = "cloudledger-${var.env}-lambda", Project = "cloud-ledger" }
 }
 
+# ALB security group — accepts HTTP/HTTPS from the internet
+resource "aws_security_group" "alb" {
+  name   = "cloudledger-${var.env}-alb"
+  vpc_id = aws_vpc.main.id
 
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "cloudledger-${var.env}-alb", Project = "cloud-ledger" }
+}
+
+# ECS security group — only accepts traffic from the ALB, on the Spring Boot port
+resource "aws_security_group" "ecs" {
+  name   = "cloudledger-${var.env}-ecs"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    description     = "API port from ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "cloudledger-${var.env}-ecs", Project = "cloud-ledger" }
+}
+
+# RDS security group — accesss from Lambda & ECS
 resource "aws_security_group" "rds" {
   name   = "cloudledger-${var.env}-rds"
   vpc_id = aws_vpc.main.id
@@ -56,7 +111,7 @@ resource "aws_security_group" "rds" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.lambda.id]
+    security_groups = [aws_security_group.lambda.id, aws_security_group.ecs.id]
   }
 
   tags = { Name = "cloudledger-${var.env}-rds", Project = "cloud-ledger" }
@@ -70,7 +125,7 @@ resource "aws_security_group" "elasticache" {
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    security_groups = [aws_security_group.lambda.id]
+    security_groups = [aws_security_group.lambda.id, aws_security_group.ecs.id]
   }
 
   tags = { Name = "cloudledger-${var.env}-elasticache", Project = "cloud-ledger" }
