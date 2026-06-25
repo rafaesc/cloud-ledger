@@ -10,7 +10,7 @@ def get_connection() -> psycopg.Connection:
         user=os.environ["DB_USER"],
         password=os.environ["DB_PASSWORD"],
         connect_timeout=10,
-        sslmode="require",
-        sslrootcert="disable",
+        sslmode=os.environ.get("DB_SSLMODE", "require"),
+        sslrootcert=os.environ.get("DB_SSLROOTCERT", "disable"),
     )
 

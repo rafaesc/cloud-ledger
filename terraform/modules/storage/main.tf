@@ -116,8 +116,8 @@ resource "aws_dynamodb_table" "projections" {
   }
 
   global_secondary_index {
-    name               = "GSI1"
-    
+    name = "GSI1"
+
     key_schema {
       attribute_name = "GSI1PK"
       key_type       = "HASH"
@@ -126,7 +126,7 @@ resource "aws_dynamodb_table" "projections" {
       attribute_name = "GSI1SK"
       key_type       = "RANGE"
     }
-    
+
     projection_type    = "INCLUDE"
     non_key_attributes = ["status", "currency", "opened_at"]
   }

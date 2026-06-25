@@ -77,8 +77,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
     Version = "2012-10-17"
     Statement = concat(
       [{
-        Effect   = "Allow"
-        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+        Effect = "Allow"
+        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
         Resource = [
           var.dynamodb_table_arn != "" ? var.dynamodb_table_arn : "*",
           var.dynamodb_table_arn != "" ? "${var.dynamodb_table_arn}/index/*" : "*"
