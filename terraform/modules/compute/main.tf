@@ -127,6 +127,7 @@ resource "aws_lambda_function" "main" {
       DB_NAME          = var.db_name
       DB_USER          = var.db_user
       DB_PASSWORD      = var.db_password
+      DB_SSLMODE       = var.db_sslmode
       SQS_QUEUE_URL    = var.queue_url
       SQS_ENDPOINT_URL = var.sqs_endpoint_url
     }

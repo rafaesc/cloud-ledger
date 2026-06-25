@@ -73,6 +73,7 @@ def sqs_queue(monkeypatch: pytest.MonkeyPatch):
     with mock_aws():
         sqs = boto3.client("sqs", region_name="us-east-1")
         url = sqs.create_queue(QueueName="cloudledger-events")["QueueUrl"]
+        sqs.purge_queue(QueueUrl=url)
         monkeypatch.setenv("SQS_QUEUE_URL", url)
         yield sqs, url
 

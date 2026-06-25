@@ -64,6 +64,7 @@ module "compute" {
   db_name               = module.storage.db_name
   db_user               = "admin"
   db_password           = "secret123"
+  db_sslmode            = "disable"
   sqs_endpoint_url      = "http://floci:4566"
   dynamodb_table_name   = module.storage.dynamodb_table_name
   dynamodb_endpoint_url = "http://floci:4566"

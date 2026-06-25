@@ -50,6 +50,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "db_sslmode" {
+  description = "psycopg sslmode — 'require' for prod/Lambda, 'disable' for Floci (no SSL)"
+  type        = string
+  default     = "require"
+}
+
 variable "sqs_endpoint_url" {
   description = "SQS endpoint URL — overridden in local to point at Floci"
   type        = string

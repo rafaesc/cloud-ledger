@@ -181,7 +181,7 @@ resource "aws_vpc_endpoint" "sqs" {
 resource "aws_vpc_endpoint" "dynamodb" {
   count             = var.create_dynamodb_endpoint ? 1 : 0
   vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.dynamodb"
   vpc_endpoint_type = "Gateway"
   route_table_ids = [
     aws_route_table.public.id,    # ECS Fargate (public subnets)
