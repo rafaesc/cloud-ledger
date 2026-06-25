@@ -1,0 +1,9 @@
+spring:
+  cloud:
+    aws:
+      sqs:
+        endpoint-url: http://localhost:4566
+
+aws:
+  dynamodb:
+    endpoint-url: http://localhost:4566

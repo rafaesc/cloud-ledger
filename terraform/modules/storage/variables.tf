@@ -24,6 +24,12 @@ variable "elasticache_subnet_group_enabled" {
   default     = true
 }
 
+variable "elasticache_tls_enabled" {
+  description = "Enable TLS (transit encryption) on the ElastiCache replication group. Set to false for Floci."
+  type        = bool
+  default     = true
+}
+
 variable "rds_username" {
   type = string
 }

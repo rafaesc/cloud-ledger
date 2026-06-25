@@ -10,4 +10,5 @@ if TYPE_CHECKING:
 
 
 def get_sqs_client() -> SQSClient:
-    return boto3.client("sqs", endpoint_url=os.environ.get("SQS_ENDPOINT_URL"))
+    endpoint_url = os.environ.get("SQS_ENDPOINT_URL") or None
+    return boto3.client("sqs", endpoint_url=endpoint_url)

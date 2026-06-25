@@ -1,4 +1,14 @@
 data "aws_availability_zones" "available" {}
+data "aws_region" "current" {}
+
+# The VPC's implicit main route table — used by private subnets that have no explicit association.
+data "aws_route_table" "main" {
+  vpc_id = aws_vpc.main.id
+  filter {
+    name   = "association.main"
+    values = ["true"]
+  }
+}
 
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
@@ -31,6 +41,24 @@ resource "aws_subnet" "public" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = { Name = "cloudledger-${var.env}-public-${count.index + 1}", Project = "cloud-ledger" }
+}
+
+# Route table: public subnets → IGW (required for ALB and ECS Fargate with assign_public_ip)
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = { Name = "cloudledger-${var.env}-public", Project = "cloud-ledger" }
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(aws_subnet.public)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
 }
 
 # Lambda security group — accesss to internet
@@ -115,6 +143,52 @@ resource "aws_security_group" "rds" {
   }
 
   tags = { Name = "cloudledger-${var.env}-rds", Project = "cloud-ledger" }
+}
+
+# SQS Interface VPC Endpoint — lets the outbox-poller Lambda (private subnet, no internet)
+# reach SQS without a NAT gateway. Only provisioned in prod; not needed locally (Floci).
+resource "aws_security_group" "vpc_endpoint" {
+  count  = var.create_sqs_endpoint ? 1 : 0
+  name   = "cloudledger-${var.env}-vpc-endpoint"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    description     = "HTTPS from Lambda"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda.id]
+  }
+
+  tags = { Name = "cloudledger-${var.env}-vpc-endpoint", Project = "cloud-ledger" }
+}
+
+resource "aws_vpc_endpoint" "sqs" {
+  count               = var.create_sqs_endpoint ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = { Name = "cloudledger-${var.env}-sqs", Project = "cloud-ledger" }
+}
+
+# DynamoDB Gateway VPC Endpoint — free; routes DynamoDB traffic from ECS (public subnets)
+# and Lambda (private subnets) through the AWS backbone instead of the internet.
+# Gateway endpoints work via route table entries, not ENIs, so no security group is needed.
+resource "aws_vpc_endpoint" "dynamodb" {
+  count             = var.create_dynamodb_endpoint ? 1 : 0
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids = [
+    aws_route_table.public.id,    # ECS Fargate (public subnets)
+    data.aws_route_table.main.id, # Lambda (private subnets use the VPC main route table)
+  ]
+
+  tags = { Name = "cloudledger-${var.env}-dynamodb", Project = "cloud-ledger" }
 }
 
 resource "aws_security_group" "elasticache" {

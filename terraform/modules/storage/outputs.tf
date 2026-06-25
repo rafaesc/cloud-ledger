@@ -13,3 +13,11 @@ output "redis_host" {
 output "dynamodb_table_name" {
   value = aws_dynamodb_table.projections.name
 }
+
+output "dynamodb_table_arn" {
+  value = aws_dynamodb_table.projections.arn
+}
+
+output "dynamodb_kms_key_arn" {
+  value = var.cmk_enabled ? aws_kms_key.dynamodb[0].arn : ""
+}

@@ -9,4 +9,5 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb import DynamoDBClient
 
 def get_dynamodb_client() -> DynamoDBClient:
-    return boto3.client("dynamodb", endpoint_url=os.environ.get("DYNAMODB_ENDPOINT_URL"))
+    endpoint_url = os.environ.get("DYNAMODB_ENDPOINT_URL") or None
+    return boto3.client("dynamodb", endpoint_url=endpoint_url)

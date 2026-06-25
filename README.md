@@ -26,7 +26,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │                    │                                                      │
 │                    ▼                                                      │
 │            ┌────────────────────────────────────────────────────────┐   │
-│            │  Spring Boot 4.1 API  (ECS Fargate)                    │   │
+│            │  Spring Boot 4.1 API  (ECS Fargate — public subnets)   │   │
 │            │  command/query handlers  ·  idempotency filter          │   │
 │            └───────────┬────────────────────────────┬───────────────┘   │
 │                        │                              │                   │
@@ -51,7 +51,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │                                             └────────────────────────┘   │
 │                                                                           │
 │  † if SQS publish fails: outbox rows written (REQUIRES_NEW);             │
-│    EventBridge triggers outbox-poller λ to relay them to SQS             │
+│    EventBridge triggers outbox-poller λ every minute to relay to SQS    │
 │                                                                           │
 │  ── READ PATH ────────────────────────────────────────────────────────   │
 │  GET /balance       Redis ──(circuit breaker / miss)──▶ DynamoDB         │
@@ -62,9 +62,11 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Write ordering:** within a command, the API (1) commits `events + accounts` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately, and (3) publishes events **directly to SQS** after the Aurora commit. If SQS is unavailable, a fallback path writes outbox rows in a separate `REQUIRES_NEW` transaction; the **outbox-poller Lambda** (triggered by EventBridge Scheduler every ~5 seconds) then relays those rows to SQS. Either way, the (4) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
+**Write ordering:** within a command, the API (1) commits `events + accounts` to Aurora atomically, then (2) **write-throughs** the new balance to Redis (30-minute TTL) so the cache is warm immediately, and (3) publishes events **directly to SQS** after the Aurora commit. If SQS is unavailable, a fallback path writes outbox rows in a separate `REQUIRES_NEW` transaction; the **outbox-poller Lambda** (triggered by EventBridge Scheduler every minute) then relays those rows to SQS. Either way, the (4) **projector Lambda** consumes SQS and writes the durable `BALANCE`, `STATE`, and `TXNS#` items to DynamoDB. The write path itself **never reads** balance from the cache — sufficient-funds validation always rehydrates the aggregate from the Aurora event store.
 
-**Read path:** `GET /balance` hits Redis first; if Redis is unavailable or the circuit breaker (Resilience4j, 50 % failure threshold, 30 s open window) trips, the handler falls through to DynamoDB automatically. All other read endpoints (`GET /account`, `GET /transactions`, list by owner) go directly to DynamoDB. Aurora is never queried on the read path.
+**Read path:** `GET /balance` hits Redis first; if Redis is unavailable or the circuit breaker (Resilience4j, 50% failure threshold, 30 s open window) trips, the handler falls through to DynamoDB automatically. All other read endpoints (`GET /account`, `GET /transactions`, list by owner) go directly to DynamoDB. Aurora is never queried on the read path.
+
+**Network topology (prod):** ECS Fargate runs in public subnets with `assign_public_ip = true` for direct ECR/SQS access. Aurora and ElastiCache run in private subnets, accessible only from the ECS and Lambda security groups. The outbox-poller Lambda runs in private subnets (Aurora access only). A **DynamoDB Gateway VPC endpoint** (free) routes DynamoDB traffic from ECS through the AWS backbone. An **SQS Interface VPC endpoint** lets the outbox-poller Lambda reach SQS from the private subnet without a NAT gateway.
 
 ---
 
@@ -79,6 +81,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 | Idempotency | Per-request UUID key stored in Aurora | Safe client retries; same key always returns the same response |
 | Authentication | Cognito M2M (Client Credentials / JWT) | Service-to-service API; JWT `sub` is the Cognito `client_id`, stored as `owner_id` |
 | Ownership enforcement | Spring `@PreAuthorize` + `AccountSecurityService` | Declarative, single bean, works uniformly for path params and request body |
+| Network | ECS in public subnets, Lambda + Aurora in private subnets, VPC endpoints | No NAT gateway; DynamoDB Gateway endpoint (free) replaces internet path; SQS Interface endpoint gives Lambda private-subnet SQS access |
 
 ---
 
@@ -109,7 +112,7 @@ cd api && ./gradlew test
 cd lambdas && uv run pytest
 ```
 
-> **Flyway migrations** are disabled at Spring Boot startup. The bootstrap script runs them via `./gradlew flywayMigrate`. To run migrations manually:
+> **Flyway migrations** are disabled at Spring Boot startup in the local profile. The bootstrap script runs them via `./gradlew flywayMigrate`. To run migrations manually:
 > ```bash
 > cd api && ./gradlew flywayMigrate \
 >   -Pflyway.url="jdbc:postgresql://localhost:7001/cloudledger" \
@@ -161,10 +164,10 @@ cloud-ledger/
 ├── terraform/
 │   ├── envs/
 │   │   ├── local/              # Floci-backed local environment (local state)
-│   │   └── prod/               # Production environment (S3 remote backend + DynamoDB lock)
+│   │   └── prod/               # Production environment (S3 remote backend + S3 native lock file)
 │   ├── modules/
-│   │   ├── bootstrap/          # One-time: S3 state bucket + DynamoDB lock table
-│   │   ├── networking/         # VPC, subnets, security groups
+│   │   ├── bootstrap/          # One-time: S3 state bucket (use_lockfile = true)
+│   │   ├── networking/         # VPC, subnets, security groups, VPC endpoints
 │   │   ├── messaging/          # KMS-encrypted SQS queue + DLQ
 │   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
 │   │   ├── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler, ECS Fargate, ALB
@@ -180,23 +183,60 @@ cloud-ledger/
 
 ## Deploying to Production
 
-Terraform state for prod is stored remotely in S3 with DynamoDB locking. Before the first `prod` apply, provision the backend once:
+Terraform state for prod is stored remotely in S3 with native S3 locking (`use_lockfile = true`). Before the first `prod` apply, provision the backend once:
 
 ```bash
-# Run once with real AWS credentials — creates the S3 bucket and DynamoDB lock table
+# Run once with real AWS credentials — creates the S3 state bucket
 cd terraform/modules/bootstrap
 terraform init && terraform apply
 ```
 
-Then deploy prod:
+On the **first prod deploy**, ECR repos must exist before the Lambda and ECS resources that reference them. Use a three-step apply:
 
 ```bash
 cd terraform/envs/prod
-terraform init                               # pulls state from S3
-TF_VAR_rds_password=<secret> terraform apply
+terraform init   # pulls state from S3
+
+# Step 1 — create ECR repos only
+TF_VAR_rds_password=<secret> terraform apply \
+  -target=module.compute.aws_ecr_repository.api \
+  -target=module.compute.aws_ecr_repository.main \
+  -target=module.compute.aws_ecr_repository.projector
+
+# Step 2 — build and push all three images
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <account_id>.dkr.ecr.us-east-1.amazonaws.com
+
+cd api && docker build -t <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/api:latest . \
+  && docker push <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/api:latest
+
+cd lambdas
+docker build -t <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/outbox-poller:latest \
+  -f outbox_poller/Dockerfile . && docker push <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/outbox-poller:latest
+docker build -t <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/projector:latest \
+  -f projector/Dockerfile . && docker push <account_id>.dkr.ecr.us-east-1.amazonaws.com/cloudledger/projector:latest
+
+# Step 3 — full apply (provisions ECS, Lambda, VPC endpoints, Cognito, ALB, Aurora, etc.)
+cd terraform/envs/prod && TF_VAR_rds_password=<secret> terraform apply
 ```
 
-After apply, build and push the API image to the prod ECR repository (`terraform output api_ecr_repository_url`), then trigger an ECS service update to roll in the new image.
+Flyway migrations run automatically when the ECS container starts (the `prod` Spring profile enables `spring.flyway.enabled: true`). The ECS task connects to Aurora from within the VPC, so no manual migration step is needed.
+
+On subsequent deploys, push new images and run `terraform apply` directly — no `-target` needed.
+
+**Getting a Cognito token (prod):**
+
+```bash
+cd terraform/envs/prod
+CLIENT_ID=$(terraform output -raw cognito_client_id)
+CLIENT_SECRET=$(terraform output -json cognito_client_secret | jq -r .)
+
+TOKEN=$(curl -s -X POST \
+  "https://cloudledger-prod.auth.us-east-1.amazoncognito.com/oauth2/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&scope=https://api.getcloudledger.com/write%20https://api.getcloudledger.com/read" \
+  | jq -r '.access_token')
+```
 
 ---
 

@@ -20,3 +20,15 @@ variable "public_subnet_cidrs" {
   type        = list(string)
   default     = ["10.0.101.0/24", "10.0.102.0/24"]
 }
+
+variable "create_sqs_endpoint" {
+  description = "Create an SQS Interface VPC Endpoint so Lambda in private subnets can reach SQS without internet egress"
+  type        = bool
+  default     = false
+}
+
+variable "create_dynamodb_endpoint" {
+  description = "Create a DynamoDB Gateway VPC Endpoint (free) to route DynamoDB traffic through the AWS backbone instead of the internet"
+  type        = bool
+  default     = false
+}

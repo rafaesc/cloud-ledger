@@ -54,11 +54,18 @@ resource "aws_iam_role_policy" "lambda_sqs" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
-      Resource = var.queue_arn
-    }]
+    Statement = concat(
+      [{
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = var.queue_arn
+      }],
+      var.sqs_kms_key_arn != "" ? [{
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Resource = var.sqs_kms_key_arn
+      }] : []
+    )
   })
 }
 
@@ -68,11 +75,21 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
-      Resource = "*"
-    }]
+    Statement = concat(
+      [{
+        Effect   = "Allow"
+        Action   = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+        Resource = [
+          var.dynamodb_table_arn != "" ? var.dynamodb_table_arn : "*",
+          var.dynamodb_table_arn != "" ? "${var.dynamodb_table_arn}/index/*" : "*"
+        ]
+      }],
+      var.dynamodb_kms_key_arn != "" ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = var.dynamodb_kms_key_arn
+      }] : []
+    )
   })
 }
 
@@ -101,6 +118,7 @@ resource "aws_lambda_function" "main" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.main.repository_url}:latest"
+  timeout       = 30
 
   environment {
     variables = {
@@ -134,6 +152,7 @@ resource "aws_lambda_function" "projector" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.projector.repository_url}:latest"
+  timeout       = 30
 
   environment {
     variables = merge(
@@ -147,10 +166,8 @@ resource "aws_lambda_function" "projector" {
     log_format = "Text"
   }
 
-  vpc_config {
-    subnet_ids         = var.subnet_ids
-    security_group_ids = [var.lambda_sg_id]
-  }
+  # No vpc_config — projector only needs SQS (trigger, managed by Lambda service) and DynamoDB.
+  # Neither requires VPC access; removing VPC config gives the function direct internet egress.
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
@@ -208,7 +225,7 @@ resource "aws_scheduler_schedule" "main" {
     mode = "OFF"
   }
 
-  schedule_expression = "rate(1 minute)"
+  schedule_expression = "rate(30 minute)"
 
   target {
     arn      = aws_lambda_function.main.arn
@@ -313,11 +330,42 @@ resource "aws_iam_role_policy" "ecs_task_sqs" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
-      Resource = var.queue_arn
-    }]
+    Statement = concat(
+      [{
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+        Resource = var.queue_arn
+      }],
+      var.sqs_kms_key_arn != "" ? [{
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Resource = var.sqs_kms_key_arn
+      }] : []
+    )
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_dynamodb" {
+  name = "dynamodb-read"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [{
+        Effect = "Allow"
+        Action = ["dynamodb:GetItem", "dynamodb:Query"]
+        Resource = [
+          var.dynamodb_table_arn,
+          "${var.dynamodb_table_arn}/index/*"
+        ]
+      }],
+      var.dynamodb_kms_key_arn != "" ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = var.dynamodb_kms_key_arn
+      }] : []
+    )
   })
 }
 
@@ -395,8 +443,9 @@ resource "aws_ecs_service" "api" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.subnet_ids
-    security_groups = [var.ecs_sg_id]
+    subnets          = var.public_subnet_ids
+    security_groups  = [var.ecs_sg_id]
+    assign_public_ip = true
   }
 
   load_balancer {

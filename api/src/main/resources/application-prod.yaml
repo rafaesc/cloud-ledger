@@ -1,4 +1,7 @@
 spring:
+  flyway:
+    enabled: true
+
   cloud:
     aws:
       sqs:
@@ -12,15 +15,16 @@ spring:
       ssl:
         enabled: true
 
-aws:
-  dynamodb:
-    table-name: ${DYNAMODB_TABLE_NAME:cloudledger-projections}
-
   datasource:
     url: jdbc:aws-wrapper:postgresql://${DB_CLUSTER_ENDPOINT}/${DB_NAME}
     username: ${DB_USERNAME}
+    password: ${DB_PASSWORD:}
     hikari:
       data-source-properties:
-        wrapperPlugins: failover,efm2,iam
+        wrapperPlugins: failover,efm2
         wrapperDialect: aurora-pg
       exception-override-class-name: software.amazon.jdbc.util.HikariCPSQLException
+
+aws:
+  dynamodb:
+    table-name: ${DYNAMODB_TABLE_NAME:cloudledger-projections}

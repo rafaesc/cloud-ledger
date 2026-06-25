@@ -7,7 +7,9 @@ provider "aws" {
 module "networking" {
   source = "../../modules/networking"
 
-  env = "prod"
+  env                      = "prod"
+  create_sqs_endpoint      = true
+  create_dynamodb_endpoint = true
 }
 
 module "messaging" {
@@ -21,29 +23,33 @@ module "storage" {
   source = "../../modules/storage"
 
   env                              = "prod"
-  cmk_enabled                     = true
+  cmk_enabled                      = true
   subnet_ids                       = module.networking.private_subnet_ids
   rds_sg_id                        = module.networking.rds_sg_id
   elasticache_sg_id                = module.networking.elasticache_sg_id
   rds_username                     = var.rds_username
   rds_password                     = var.rds_password
   elasticache_subnet_group_enabled = true
+  elasticache_tls_enabled          = true
 }
 
 module "compute" {
   source = "../../modules/compute"
 
-  env                   = "prod"
-  subnet_ids            = module.networking.private_subnet_ids
-  lambda_sg_id          = module.networking.lambda_sg_id
-  queue_url             = module.messaging.queue_url
-  queue_arn             = module.messaging.queue_arn
-  db_host               = module.storage.db_address
-  db_name               = module.storage.db_name
-  db_user               = var.rds_username
-  db_password           = var.rds_password
-  sqs_endpoint_url      = ""
-  dynamodb_table_name   = module.storage.dynamodb_table_name
+  env                 = "prod"
+  subnet_ids          = module.networking.private_subnet_ids
+  lambda_sg_id        = module.networking.lambda_sg_id
+  queue_url           = module.messaging.queue_url
+  queue_arn           = module.messaging.queue_arn
+  sqs_kms_key_arn     = module.messaging.sqs_kms_key_arn
+  db_host             = module.storage.db_address
+  db_name             = module.storage.db_name
+  db_user             = var.rds_username
+  db_password         = var.rds_password
+  sqs_endpoint_url    = ""
+  dynamodb_table_name  = module.storage.dynamodb_table_name
+  dynamodb_table_arn   = module.storage.dynamodb_table_arn
+  dynamodb_kms_key_arn = module.storage.dynamodb_kms_key_arn
 
   # ECS + ALB
   vpc_id                 = module.networking.vpc_id

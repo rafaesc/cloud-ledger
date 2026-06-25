@@ -49,6 +49,7 @@ module "storage" {
   rds_username                     = "admin"
   rds_password                     = "secret123"
   elasticache_subnet_group_enabled = false
+  elasticache_tls_enabled          = false
 }
 
 module "compute" {

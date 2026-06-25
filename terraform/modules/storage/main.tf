@@ -75,13 +75,14 @@ resource "aws_elasticache_subnet_group" "main" {
 }
 
 resource "aws_elasticache_replication_group" "main" {
-  replication_group_id = "cloudledger-${var.env}"
-  description          = "CloudLedger Redis cache"
-  node_type            = "cache.t3.micro"
-  num_cache_clusters   = 1
-  port                 = 6379
-  subnet_group_name    = var.elasticache_subnet_group_enabled ? aws_elasticache_subnet_group.main[0].name : null
-  security_group_ids   = [var.elasticache_sg_id]
+  replication_group_id       = "cloudledger-${var.env}"
+  description                = "CloudLedger Redis cache"
+  node_type                  = "cache.t3.micro"
+  num_cache_clusters         = 1
+  port                       = 6379
+  subnet_group_name          = var.elasticache_subnet_group_enabled ? aws_elasticache_subnet_group.main[0].name : null
+  security_group_ids         = [var.elasticache_sg_id]
+  transit_encryption_enabled = var.elasticache_tls_enabled
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
@@ -116,8 +117,16 @@ resource "aws_dynamodb_table" "projections" {
 
   global_secondary_index {
     name               = "GSI1"
-    hash_key           = "GSI1PK"
-    range_key          = "GSI1SK"
+    
+    key_schema {
+      attribute_name = "GSI1PK"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "GSI1SK"
+      key_type       = "RANGE"
+    }
+    
     projection_type    = "INCLUDE"
     non_key_attributes = ["status", "currency", "opened_at"]
   }

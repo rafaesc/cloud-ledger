@@ -27,6 +27,7 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
                 FROM cloudledger.outbox
                 WHERE published_at IS NULL
                 ORDER BY sequence_number
+                LIMIT 100
                 FOR UPDATE SKIP LOCKED
                 """
             )

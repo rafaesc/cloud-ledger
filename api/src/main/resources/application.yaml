@@ -22,7 +22,6 @@ spring:
     aws:
       sqs:
         queue-url: http://localhost:4566/000000000000/cloudledger-events
-        endpoint-url: http://localhost:4566
       region: us-east-1
 
   security:
@@ -44,7 +43,6 @@ spring:
 
 aws:
   dynamodb:
-    endpoint-url: http://localhost:4566
     table-name: cloudledger-projections
 
 management:

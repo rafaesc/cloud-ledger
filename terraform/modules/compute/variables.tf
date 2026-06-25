@@ -60,6 +60,24 @@ variable "dynamodb_table_name" {
   type        = string
 }
 
+variable "dynamodb_table_arn" {
+  description = "DynamoDB projections table ARN — used to scope IAM policies for ECS and Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "dynamodb_kms_key_arn" {
+  description = "ARN of the CMK encrypting DynamoDB. Empty when cmk_enabled is false."
+  type        = string
+  default     = ""
+}
+
+variable "sqs_kms_key_arn" {
+  description = "ARN of the CMK encrypting SQS. Empty when cmk_enabled is false."
+  type        = string
+  default     = ""
+}
+
 variable "dynamodb_endpoint_url" {
   description = "DynamoDB endpoint URL — overridden in local to point at Floci"
   type        = string
