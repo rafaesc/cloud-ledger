@@ -196,6 +196,7 @@ jobs:
           aws lambda invoke \
             --function-name projector \
             --payload '{"Records":[]}' \
+            --cli-binary-format raw-in-base64-out \
             /tmp/projector-out.json \
             --endpoint-url $AWS_ENDPOINT_URL
 
