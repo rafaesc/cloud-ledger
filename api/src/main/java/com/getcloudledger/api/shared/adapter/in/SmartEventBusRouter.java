@@ -6,6 +6,7 @@ import com.getcloudledger.api.shared.domain.bus.event.BaseEvent;
 import com.getcloudledger.api.shared.domain.bus.event.DomainEvent;
 import com.getcloudledger.api.shared.domain.bus.event.DomainEventJsonSerializer;
 import com.getcloudledger.api.shared.domain.bus.event.EventBus;
+import com.getcloudledger.api.shared.tracing.TraceContextSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -41,11 +42,25 @@ public class SmartEventBusRouter implements EventBus {
         // markChangesAsCommitted(), which fires before afterCommit(). Without a copy,
         // afterCommit() would see an empty list.
         var snapshot = List.copyOf(events);
+
+        // Capture the active trace context NOW, while we are still on the request thread inside
+        // the caller's transaction. If these rows later fall back to the outbox, the poller will
+        // re-inject this context so the trace continues through the relay. Empty/no-op when the
+        // ADOT agent is not attached (local, tests).
+        var carrier = TraceContextSupport.currentCarrier();
+        var traceparent = carrier.get("traceparent");
+        var tracestate = carrier.get("tracestate");
+
         var outboxRows = snapshot.stream()
-                .map(e -> new OutboxEntity(
-                        e.getEventId(),
-                        DomainEventJsonSerializer.serialize((DomainEvent) e),
-                        e.getSequenceNumber()))
+                .map(e -> {
+                    var row = new OutboxEntity(
+                            e.getEventId(),
+                            DomainEventJsonSerializer.serialize((DomainEvent) e),
+                            e.getSequenceNumber());
+                    row.setTraceparent(traceparent);
+                    row.setTracestate(tracestate);
+                    return row;
+                })
                 .toList();
 
         log.info("Registering afterCommit SQS sync for aggregateType={} events={}", aggregateType, snapshot.size());

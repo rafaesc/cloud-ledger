@@ -34,6 +34,17 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// Tracing is provided AT RUNTIME by the ADOT (AWS Distro for OpenTelemetry) Java agent,
+	// attached with -javaagent in prod (see api/Dockerfile + the ECS task def). The agent
+	// auto-instruments Spring MVC / JDBC / the AWS SDK and exports OTLP -> X-Ray with SigV4 and
+	// X-Ray-compatible trace IDs. That is why there is NO spring-boot-starter-opentelemetry here:
+	// it would stand up a second, competing tracer pipeline.
+	//
+	// We still compile against the bare OTel API for ONE manual step: capturing the current
+	// W3C trace context into the outbox row on the SQS-fallback path (see SmartEventBusRouter).
+	// Pinned below the agent's bundled API version so the agent's API bridge works; it degrades
+	// to a harmless no-op when the agent is absent (local / tests).
+	implementation 'io.opentelemetry:opentelemetry-api:1.40.0'
 	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'

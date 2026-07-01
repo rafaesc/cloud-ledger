@@ -7,6 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.43.33",
     "psycopg>=3.3.4",
+    # OTel API only — needed at import time and for the inject/extract propagation logic in the
+    # handlers. The full ADOT distro + SDK is provided at runtime by the layer copied into the
+    # Lambda image (see each Dockerfile), so it is intentionally NOT a runtime dependency here.
+    "opentelemetry-api>=1.43.0",
 ]
 
 [dependency-groups]

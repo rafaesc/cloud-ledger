@@ -1,3 +1,67 @@
+# ── OpenTelemetry / X-Ray ─────────────────────────────────────────────────────
+# A single switch: tracing is on iff an X-Ray OTLP endpoint was supplied (prod). Empty -> local,
+# where Floci can't reach X-Ray, so all OTel env vars and IAM are omitted.
+locals {
+  otel_enabled = var.otel_traces_endpoint != ""
+
+  # Settings shared by the Spring task and both Lambdas. SigV4 signing to the X-Ray OTLP endpoint
+  # is done by the ADOT agent (Java) / ADOT layer (Python) — no collector.
+  otel_common_env = {
+    # Wire format for the OTLP exporter. X-Ray's endpoint only accepts HTTP + protobuf (not gRPC).
+    OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+    # Where spans are POSTed: https://xray.<region>.amazonaws.com/v1/traces (the Transaction Search endpoint).
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = var.otel_traces_endpoint
+    # Sampling strategy: honor the parent's sampled flag if present, else sample by trace-id ratio.
+    # This keeps a trace all-sampled or all-dropped end to end across API -> SQS -> Lambdas.
+    OTEL_TRACES_SAMPLER = "parentbased_traceidratio"
+    # The ratio (0..1) used when this service makes the head sampling decision (no parent).
+    OTEL_TRACES_SAMPLER_ARG = var.otel_traces_sampler_arg
+    # Export traces only — no metrics pipeline (we don't send OTLP metrics to CloudWatch here).
+    OTEL_METRICS_EXPORTER = "none"
+    # Export traces only — no logs pipeline (app logs already go to CloudWatch Logs directly).
+    OTEL_LOGS_EXPORTER = "none"
+    # Disable CloudWatch Application Signals: it also ingests spans, which would double Transaction
+    # Search cost. We want raw traces in X-Ray, not the Application Signals APM layer.
+    OTEL_AWS_APPLICATION_SIGNALS_ENABLED = "false"
+    # Pin the propagator set on BOTH the Java API and the Python Lambdas so trace context crosses
+    # SQS consistently. Without this, the two ADOT distros can default to different propagators (e.g.
+    # xray vs tracecontext), so the API injects one header and the projector extracts another and
+    # misses it. tracecontext gives the W3C `traceparent` the code is built around (TraceContextSupport,
+    # the outbox traceparent/tracestate columns, the projector carrier); xray keeps X-Ray-native interop.
+    OTEL_PROPAGATORS = "tracecontext,baggage,xray"
+  }
+
+  # ECS (Spring) — task-definition environment shape: a list of { name, value }.
+  otel_ecs_env = local.otel_enabled ? concat(
+    [
+      # Attach the ADOT auto-instrumentation agent baked into the image at /opt. JAVA_TOOL_OPTIONS
+      # is read by the JVM at startup, so we never have to touch the Dockerfile CMD.
+      { name = "JAVA_TOOL_OPTIONS", value = "-javaagent:/opt/aws-opentelemetry-agent.jar" },
+      # service.name = how this app appears in X-Ray; deployment.environment = the "Hosted in" env.
+      { name = "OTEL_RESOURCE_ATTRIBUTES", value = "service.name=cloudledger-${var.env}-api,deployment.environment=${var.env}" },
+      # Inject trace context into SQS message attributes on SendMessage. The OTel AWS SDK
+      # instrumentation defaults to the AWSTraceHeader *system* attribute (X-Ray format), which the
+      # projector never reads — it only inspects messageAttributes. This flag switches injection to
+      # the configured propagator writing regular message attributes (traceparent), which the
+      # projector extracts. NOTE the exact spelling: ..._USE_PROPAGATOR_FOR_MESSAGING (propagatOR,
+      # not propagatION) — the wrong spelling is silently ignored and the projector roots a new trace.
+      { name = "OTEL_INSTRUMENTATION_AWS_SDK_EXPERIMENTAL_USE_PROPAGATOR_FOR_MESSAGING", value = "true" },
+    ],
+    [for k, v in local.otel_common_env : { name = k, value = v }]
+  ) : []
+
+  # Lambda — environment shape: a map.
+  otel_lambda_env = local.otel_enabled ? merge(local.otel_common_env, {
+    # The AWS base image runs this wrapper before the handler; /opt/otel-instrument (from the copied
+    # ADOT layer) bootstraps auto-instrumentation. This is the layer-equivalent for container images.
+    AWS_LAMBDA_EXEC_WRAPPER = "/opt/otel-instrument"
+    # Tell the OTel Python bootstrap to use the AWS Distro (X-Ray-compatible IDs, AWS resource detectors).
+    OTEL_PYTHON_DISTRO = "aws_distro"
+    # ...and the AWS configurator, which wires the SigV4-signing OTLP exporter to the X-Ray endpoint.
+    OTEL_PYTHON_CONFIGURATOR = "aws_configurator"
+  }) : {}
+}
+
 # ── ECR ──────────────────────────────────────────────────────────────────────
 
 resource "aws_ecr_repository" "api" {
@@ -46,6 +110,14 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Lets the ADOT exporter sign (SigV4) and send spans to the X-Ray OTLP endpoint.
+# Grants xray:PutTraceSegments / PutSpans / PutTelemetryRecords + sampling-target reads.
+resource "aws_iam_role_policy_attachment" "lambda_xray" {
+  count      = local.otel_enabled ? 1 : 0
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
 }
 
 resource "aws_iam_role_policy" "lambda_sqs" {
@@ -121,7 +193,7 @@ resource "aws_lambda_function" "main" {
   timeout       = 30
 
   environment {
-    variables = {
+    variables = merge({
       DB_HOST          = var.db_host
       DB_PORT          = tostring(var.db_port)
       DB_NAME          = var.db_name
@@ -130,7 +202,10 @@ resource "aws_lambda_function" "main" {
       DB_SSLMODE       = var.db_sslmode
       SQS_QUEUE_URL    = var.queue_url
       SQS_ENDPOINT_URL = var.sqs_endpoint_url
-    }
+      },
+      local.otel_lambda_env,
+      local.otel_enabled ? { OTEL_RESOURCE_ATTRIBUTES = "service.name=outbox-poller,deployment.environment=${var.env}" } : {}
+    )
   }
 
   logging_config {
@@ -158,7 +233,9 @@ resource "aws_lambda_function" "projector" {
   environment {
     variables = merge(
       { DYNAMODB_TABLE = var.dynamodb_table_name },
-      var.dynamodb_endpoint_url != "" ? { DYNAMODB_ENDPOINT_URL = var.dynamodb_endpoint_url } : {}
+      var.dynamodb_endpoint_url != "" ? { DYNAMODB_ENDPOINT_URL = var.dynamodb_endpoint_url } : {},
+      local.otel_lambda_env,
+      local.otel_enabled ? { OTEL_RESOURCE_ATTRIBUTES = "service.name=projector,deployment.environment=${var.env}" } : {}
     )
   }
 
@@ -346,6 +423,12 @@ resource "aws_iam_role_policy" "ecs_task_sqs" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "ecs_task_xray" {
+  count      = local.otel_enabled ? 1 : 0
+  role       = aws_iam_role.ecs_task.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
+}
+
 resource "aws_iam_role_policy" "ecs_task_dynamodb" {
   name = "dynamodb-read"
   role = aws_iam_role.ecs_task.id
@@ -401,7 +484,7 @@ resource "aws_ecs_task_definition" "api" {
       protocol      = "tcp"
     }]
 
-    environment = [
+    environment = concat([
       { name = "SPRING_PROFILES_ACTIVE", value = var.spring_profiles_active },
       { name = "DB_CLUSTER_ENDPOINT", value = var.db_host },
       { name = "DB_NAME", value = var.db_name },
@@ -417,7 +500,7 @@ resource "aws_ecs_task_definition" "api" {
       { name = "AWS_ACCESS_KEY_ID", value = var.aws_access_key_id },
       { name = "AWS_SECRET_ACCESS_KEY", value = var.aws_secret_access_key },
       { name = "AWS_DEFAULT_REGION", value = "us-east-1" },
-    ]
+    ], local.otel_ecs_env)
 
     logConfiguration = {
       logDriver = "awslogs"
@@ -442,6 +525,12 @@ resource "aws_ecs_service" "api" {
   task_definition = aws_ecs_task_definition.api.arn
   desired_count   = 2
   launch_type     = "FARGATE"
+
+  # The API boots in ~105-136s (Spring Boot + the ADOT Java agent transforming classes at startup).
+  # The ALB marks a target unhealthy after ~90s (unhealthy_threshold 3 x interval 30s), so without a
+  # grace period ECS kills tasks mid-boot for "failed ELB health checks" and deploys flap/stall.
+  # This tells ECS to ignore ELB health failures for the first 240s, giving the app time to come up.
+  health_check_grace_period_seconds = 240
 
   network_configuration {
     subnets          = var.public_subnet_ids

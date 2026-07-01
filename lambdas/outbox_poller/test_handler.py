@@ -32,7 +32,9 @@ def test_publishes_unpublished_events_to_sqs(mock_get_conn: MagicMock, monkeypat
     payload = {"type": "MoneyDeposited", "aggregateId": str(event_id)}
 
     mock_cur = MagicMock()
-    mock_cur.fetchall.return_value = [(event_id, payload)]
+    # Row shape matches the SELECT: (event_id, payload, traceparent, tracestate).
+    # No trace context here, so the message is published without trace attributes.
+    mock_cur.fetchall.return_value = [(event_id, payload, None, None)]
 
     mock_conn = MagicMock()
     mock_conn.__enter__.return_value = mock_conn

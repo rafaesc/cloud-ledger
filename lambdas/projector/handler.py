@@ -6,10 +6,16 @@ import os
 from decimal import Decimal
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.propagate import extract
+from opentelemetry.trace import SpanKind
+
 from shared.dynamo import get_dynamodb_client
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+tracer = trace.get_tracer(__name__)
 
 BALANCE_EVENTS = frozenset({
     "MoneyDeposited", "MoneyWithdrawn",
@@ -23,6 +29,16 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     records = event["Records"]
 
     for record in records:
+        # Extract the producer's trace context from the SQS message attributes. In the Lambda
+        # event-source payload each attribute value uses the lowercase "stringValue" key (unlike
+        # the boto3 send format). extract() yields the root context when nothing is present.
+        carrier = {
+            key: value["stringValue"]
+            for key, value in record.get("messageAttributes", {}).items()
+            if isinstance(value, dict) and "stringValue" in value
+        }
+        parent_ctx = extract(carrier)
+
         body = json.loads(record["body"])
         data = body["data"]
         meta = body["meta"]
@@ -30,7 +46,14 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
         event_type = data["type"]
         logger.info("Processing event type=%s", event_type)
 
-        dispatch(event_type, data, meta)
+        # One CONSUMER span per record, parented to that record's own producer trace (a batch may
+        # mix traces, so we never span the whole batch).
+        with tracer.start_as_current_span(
+            f"projector {event_type}",
+            context=parent_ctx,
+            kind=SpanKind.CONSUMER,
+        ):
+            dispatch(event_type, data, meta)
 
     return {"processed": len(records)}
 

@@ -167,3 +167,21 @@ variable "aws_secret_access_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "otel_traces_endpoint" {
+  description = <<-EOT
+    X-Ray OTLP traces endpoint, e.g. https://xray.us-east-1.amazonaws.com/v1/traces.
+    When set, OpenTelemetry tracing is enabled across the ECS API task and both Lambdas:
+    the ADOT Java agent / Python ADOT layer are activated and AWSXrayWriteOnlyPolicy is
+    attached. Leave empty (the default) to disable tracing entirely — required for local
+    (Floci), which cannot reach X-Ray.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "otel_traces_sampler_arg" {
+  description = "Head sampling ratio (0..1) used by parentbased_traceidratio when OTel tracing is enabled."
+  type        = string
+  default     = "0.05"
+}

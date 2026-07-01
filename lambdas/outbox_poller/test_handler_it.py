@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS cloudledger.outbox (
     published_at    TIMESTAMP,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     sequence_number BIGINT      NOT NULL DEFAULT 0,
+    traceparent     TEXT,
+    tracestate      TEXT,
     CONSTRAINT pk_outbox PRIMARY KEY (event_id)
 );
 """

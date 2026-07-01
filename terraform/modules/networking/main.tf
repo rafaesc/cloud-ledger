@@ -148,16 +148,16 @@ resource "aws_security_group" "rds" {
 # SQS Interface VPC Endpoint — lets the outbox-poller Lambda (private subnet, no internet)
 # reach SQS without a NAT gateway. Only provisioned in prod; not needed locally (Floci).
 resource "aws_security_group" "vpc_endpoint" {
-  count  = var.create_sqs_endpoint ? 1 : 0
+  count  = (var.create_sqs_endpoint || var.create_xray_endpoint) ? 1 : 0
   name   = "cloudledger-${var.env}-vpc-endpoint"
   vpc_id = aws_vpc.main.id
 
   ingress {
-    description     = "HTTPS from Lambda"
+    description     = "HTTPS from Lambda and ECS"
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = [aws_security_group.lambda.id]
+    security_groups = [aws_security_group.lambda.id, aws_security_group.ecs.id]
   }
 
   tags = { Name = "cloudledger-${var.env}-vpc-endpoint", Project = "cloud-ledger" }
@@ -173,6 +173,22 @@ resource "aws_vpc_endpoint" "sqs" {
   private_dns_enabled = true
 
   tags = { Name = "cloudledger-${var.env}-sqs", Project = "cloud-ledger" }
+}
+
+# X-Ray Interface VPC Endpoint — lets the outbox-poller Lambda (private subnet, no internet)
+# reach the X-Ray OTLP endpoint (xray.<region>.amazonaws.com) to export traces. Without this the
+# collector-less ADOT exporter would hang/fail exactly like the documented psycopg OCSP issue.
+# Only provisioned in prod; the projector Lambda is not in a VPC so it egresses directly.
+resource "aws_vpc_endpoint" "xray" {
+  count               = var.create_xray_endpoint ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.region}.xray"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = { Name = "cloudledger-${var.env}-xray", Project = "cloud-ledger" }
 }
 
 # DynamoDB Gateway VPC Endpoint — free; routes DynamoDB traffic from ECS (public subnets)

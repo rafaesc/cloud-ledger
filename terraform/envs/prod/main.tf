@@ -10,6 +10,7 @@ module "networking" {
   env                      = "prod"
   create_sqs_endpoint      = true
   create_dynamodb_endpoint = true
+  create_xray_endpoint     = true
 }
 
 module "messaging" {
@@ -60,6 +61,13 @@ module "compute" {
   redis_port             = 6379
   cognito_jwk_set_uri    = "https://cognito-idp.${var.region}.amazonaws.com/${module.auth.user_pool_id}/.well-known/jwks.json"
   spring_profiles_active = "prod"
+
+  # Enables collector-less OTel -> X-Ray (SigV4) tracing across the API task and both Lambdas.
+  # Must be paired with Transaction Search being enabled on the account (see xray.tf).
+  otel_traces_endpoint = "https://xray.${var.region}.amazonaws.com/v1/traces"
+  # Low-traffic ledger: head-sample every request so manual testing is actually traceable.
+  # Dial this back (e.g. 0.05) once real traffic makes 100% sampling costly.
+  otel_traces_sampler_arg = "1.0"
   # aws_access_key_id / aws_secret_access_key intentionally omitted —
   # the ECS task role surfaces credentials automatically via the container metadata endpoint.
 }
@@ -68,4 +76,13 @@ module "auth" {
   source = "../../modules/auth"
 
   env = "prod"
+}
+
+module "observability" {
+  source = "../../modules/observability"
+
+  env = "prod"
+  # Index every sampled span into the searchable trace store. Without this the default (1%)
+  # means the X-Ray traces console shows almost nothing even though spans reach aws/spans.
+  indexing_percentage = 100
 }

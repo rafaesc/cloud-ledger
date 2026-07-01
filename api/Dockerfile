@@ -35,6 +35,13 @@ RUN addgroup -g 1001 -S appgroup && \
 # Set working directory
 WORKDIR /app
 
+# AWS Distro for OpenTelemetry (ADOT) Java auto-instrumentation agent.
+# Baked into the image but only ACTIVATED in prod via JAVA_TOOL_OPTIONS=-javaagent:... set in
+# the ECS task def — so local/local-ecs (Floci, no X-Ray reachable) starts without it.
+# Pinned for reproducible builds; bump deliberately.
+ADD https://github.com/aws-observability/aws-otel-java-instrumentation/releases/download/v2.28.2/aws-opentelemetry-agent.jar /opt/aws-opentelemetry-agent.jar
+RUN chmod 644 /opt/aws-opentelemetry-agent.jar
+
 # Copy the built JAR from builder stage
 COPY --from=builder /app/build/libs/*.jar app.jar
 

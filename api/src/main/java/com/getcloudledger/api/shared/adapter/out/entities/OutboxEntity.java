@@ -39,6 +39,17 @@ public class OutboxEntity {
     @Column(name = "sequence_number", nullable = false)
     private Long sequenceNumber;
 
+    /**
+     * W3C trace context captured when the row was written, so the outbox-poller can re-inject it
+     * into the relayed SQS message and keep the distributed trace unbroken across the fallback
+     * path. Null when the event was produced outside an active trace (e.g. agent not attached).
+     */
+    @Column(name = "traceparent")
+    private String traceparent;
+
+    @Column(name = "tracestate")
+    private String tracestate;
+
     @Generated
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;

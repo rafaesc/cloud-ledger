@@ -32,3 +32,9 @@ variable "create_dynamodb_endpoint" {
   type        = bool
   default     = false
 }
+
+variable "create_xray_endpoint" {
+  description = "Create an X-Ray Interface VPC Endpoint so the private-subnet outbox-poller Lambda can export OTLP traces to X-Ray without internet egress. Prod only."
+  type        = bool
+  default     = false
+}

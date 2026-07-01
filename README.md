@@ -82,6 +82,7 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 | Authentication | Cognito M2M (Client Credentials / JWT) | Service-to-service API; JWT `sub` is the Cognito `client_id`, stored as `owner_id` |
 | Ownership enforcement | Spring `@PreAuthorize` + `AccountSecurityService` | Declarative, single bean, works uniformly for path params and request body |
 | Network | ECS in public subnets, Lambda + Aurora in private subnets, VPC endpoints | No NAT gateway; DynamoDB Gateway endpoint (free) replaces internet path; SQS Interface endpoint gives Lambda private-subnet SQS access |
+| Distributed tracing | Collector-less OpenTelemetry (ADOT) → X-Ray OTLP, SigV4-signed | No sidecar — the ADOT Java agent (ECS) and ADOT layer (Lambdas) sign requests themselves; trace context flows through SQS, persisted on outbox rows for the fallback path. **Transaction Search is enabled via a CloudFormation stack wrapped in Terraform** (`aws_cloudformation_stack`) because the AWS provider has no native resource for `AWS::XRay::TransactionSearchConfig` |
 
 ---
 
@@ -171,7 +172,8 @@ cloud-ledger/
 │   │   ├── messaging/          # KMS-encrypted SQS queue + DLQ
 │   │   ├── storage/            # Aurora PostgreSQL cluster, ElastiCache, DynamoDB
 │   │   ├── compute/            # ECR, IAM roles, Lambda, EventBridge Scheduler, ECS Fargate, ALB
-│   │   └── auth/               # Cognito User Pool, Resource Server, M2M app client
+│   │   ├── auth/               # Cognito User Pool, Resource Server, M2M app client
+│   │   └── observability/      # X-Ray Transaction Search (CloudFormation stack wrapped in Terraform)
 │   └── scripts/
 │       ├── local-bootstrap.sh  # full setup from scratch
 │       ├── local-destroy.sh    # full teardown
@@ -223,6 +225,8 @@ cd terraform/envs/prod && TF_VAR_rds_password=<secret> terraform apply
 Flyway migrations run automatically when the ECS container starts (the `prod` Spring profile enables `spring.flyway.enabled: true`). The ECS task connects to Aurora from within the VPC, so no manual migration step is needed.
 
 On subsequent deploys, push new images and run `terraform apply` directly — no `-target` needed.
+
+**X-Ray Transaction Search (CloudFormation inside Terraform):** prod tracing sends OTLP directly to the X-Ray endpoint, which requires account-level **Transaction Search** to be enabled first. The Terraform AWS provider has no native resource for `AWS::XRay::TransactionSearchConfig`, so the `observability` module wraps the AWS-documented CloudFormation in an `aws_cloudformation_stack` (the Logs resource policy + the Transaction Search config). Two caveats: Transaction Search is account-level and must be **disabled before the first apply** (CloudFormation is what creates it), and because the outbox-poller runs in a private subnet, the `networking` module adds an **X-Ray interface VPC endpoint** so it can export traces without internet egress. Verify with `aws xray get-trace-segment-destination` → `{"Destination":"CloudWatchLogs","Status":"ACTIVE"}`.
 
 **Getting a Cognito token (prod):**
 
