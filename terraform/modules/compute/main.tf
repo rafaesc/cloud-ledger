@@ -477,7 +477,7 @@ resource "aws_ecs_task_definition" "api" {
 
   container_definitions = jsonencode([{
     name  = "api"
-    image = "${aws_ecr_repository.api.repository_url}:latest"
+    image = "${aws_ecr_repository.api.repository_url}:${var.api_image_tag}"
 
     portMappings = [{
       containerPort = 8080
@@ -486,6 +486,10 @@ resource "aws_ecs_task_definition" "api" {
 
     environment = concat([
       { name = "SPRING_PROFILES_ACTIVE", value = var.spring_profiles_active },
+      # Deployed version + commit — visible in the ECS console (task def → Environment)
+      # and served by /actuator/info via the env info contributor.
+      { name = "APP_VERSION", value = var.api_image_tag },
+      { name = "GIT_COMMIT", value = var.git_commit },
       { name = "DB_CLUSTER_ENDPOINT", value = var.db_host },
       { name = "DB_NAME", value = var.db_name },
       { name = "DB_USERNAME", value = var.db_user },

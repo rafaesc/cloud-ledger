@@ -62,6 +62,11 @@ module "compute" {
   cognito_jwk_set_uri    = "https://cognito-idp.${var.region}.amazonaws.com/${module.auth.user_pool_id}/.well-known/jwks.json"
   spring_profiles_active = "prod"
 
+  # Immutable release tag + commit — set by CD (TF_VAR_api_image_tag / TF_VAR_git_commit).
+  # The task def pins this exact tag, so `terraform apply` rolls ECS onto the new image.
+  api_image_tag = var.api_image_tag
+  git_commit    = var.git_commit
+
   # Enables collector-less OTel -> X-Ray (SigV4) tracing across the API task and both Lambdas.
   # Must be paired with Transaction Search being enabled on the account (see xray.tf).
   otel_traces_endpoint = "https://xray.${var.region}.amazonaws.com/v1/traces"

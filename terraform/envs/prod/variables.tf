@@ -15,3 +15,15 @@ variable "rds_password" {
   type        = string
   sensitive   = true
 }
+
+variable "api_image_tag" {
+  description = "Immutable API image tag to deploy (e.g. v1.2.3). Supplied by CD via TF_VAR_api_image_tag."
+  type        = string
+  default     = "latest"
+}
+
+variable "git_commit" {
+  description = "Git commit SHA of the deployed build. Supplied by CD via TF_VAR_git_commit."
+  type        = string
+  default     = ""
+}

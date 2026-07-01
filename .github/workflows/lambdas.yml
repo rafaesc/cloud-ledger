@@ -2,12 +2,13 @@ name: Lambdas
 
 on:
   push:
-    branches: [master]
+    branches:
+      - '**'
     paths:
       - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
-      - '.github/workflow/lambdas.yml'
+      - '.github/workflows/lambdas.yml'
       - 'docker-compose.yml'
   pull_request:
     branches: [master]
@@ -15,10 +16,15 @@ on:
       - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
-      - '.github/workflow/lambdas.yml'
+      - '.github/workflows/lambdas.yml'
+      - 'docker-compose.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   OUTBOX_POLLER_IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller

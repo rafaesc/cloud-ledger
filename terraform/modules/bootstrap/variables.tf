@@ -25,3 +25,21 @@ variable "tags" {
     component = "bootstrap"
   }
 }
+
+variable "github_repo" {
+  description = "GitHub repo (owner/name) whose Actions may assume the deploy role via OIDC."
+  type        = string
+  default     = "rafaesc/cloud-ledger"
+}
+
+variable "github_environment" {
+  description = "GitHub Environment the CD job runs in. OIDC trust is scoped to only this environment's jobs."
+  type        = string
+  default     = "prod"
+}
+
+variable "deploy_role_name" {
+  description = "Name of the IAM role GitHub Actions assumes to deploy prod."
+  type        = string
+  default     = "cloudledger-github-deploy"
+}

@@ -2,21 +2,27 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [master]
+    branches:
+      - '**'
     paths:
       - 'api/**'
       - 'terraform/**'
-      - '.github/workflow/docker-image.yml'
+      - '.github/workflows/docker-image.yml'
       - 'docker-compose.yml'
   pull_request:
     branches: [master]
     paths:
       - 'api/**'
       - 'terraform/**'
-      - '.github/workflow/docker-image.yml'
+      - '.github/workflows/docker-image.yml'
+      - 'docker-compose.yml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   API_IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/api

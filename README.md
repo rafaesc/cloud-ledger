@@ -185,12 +185,16 @@ cloud-ledger/
 
 ## Deploying to Production
 
-Terraform state for prod is stored remotely in S3 with native S3 locking (`use_lockfile = true`). Before the first `prod` apply, provision the backend once:
+Terraform state for prod is stored remotely in S3 with native S3 locking (`use_lockfile = true`). Before the first `prod` apply, provision the backend once. The same bootstrap also creates the **GitHub Actions OIDC deploy role** used by CI/CD (see below):
 
 ```bash
-# Run once with real AWS credentials — creates the S3 state bucket
+# Run once with real AWS credentials — creates the S3 state bucket + OIDC deploy role
 cd terraform/modules/bootstrap
 terraform init && terraform apply
+
+# Wire the OIDC role into the prod GitHub Environment (non-secret variable)
+gh variable set AWS_DEPLOY_ROLE_ARN --env prod \
+  --body "$(terraform output -raw github_deploy_role_arn)"
 ```
 
 On the **first prod deploy**, ECR repos must exist before the Lambda and ECS resources that reference them. Use a three-step apply:
@@ -224,7 +228,7 @@ cd terraform/envs/prod && TF_VAR_rds_password=<secret> terraform apply
 
 Flyway migrations run automatically when the ECS container starts (the `prod` Spring profile enables `spring.flyway.enabled: true`). The ECS task connects to Aurora from within the VPC, so no manual migration step is needed.
 
-On subsequent deploys, push new images and run `terraform apply` directly — no `-target` needed.
+After this one-time bootstrap, **subsequent deploys are automated** — push a version tag and CD does the build → ECR → rolling ECS deploy (see [CI / CD](#ci--cd-github-actions) below). To deploy by hand instead, push new images and run `terraform apply` directly — no `-target` needed.
 
 **Distributed tracing (collector-less OpenTelemetry → X-Ray):** tracing is prod-only, gated by the `otel_traces_endpoint` compute-module variable (empty in local/Floci, which can't reach X-Ray). There is no ADOT collector or sidecar — every service signs its own OTLP requests with SigV4 and sends them straight to the X-Ray endpoint. The Spring API is instrumented by the **ADOT Java agent** baked into `api/Dockerfile` and activated in prod via `JAVA_TOOL_OPTIONS=-javaagent:...` from the ECS task def; both Python Lambdas pip-install `aws-opentelemetry-distro` and activate it via `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument`. Trace context survives the SQS hop on both publish paths: on the happy path the Java agent injects `traceparent` into SQS message attributes (requires `OTEL_INSTRUMENTATION_AWS_SDK_EXPERIMENTAL_USE_PROPAGATION_FOR_MESSAGING=true`); on the outbox fallback path it can't ride through the DB in memory, so the `outbox` table carries nullable `traceparent`/`tracestate` columns stamped by `SmartEventBusRouter` and re-injected by the outbox-poller, so the projector joins the **original** trace instead of rooting a new one. Head sampling is `parentbased_traceidratio` (100% in prod, dial back once traffic makes it costly) so a trace is all-sampled or all-dropped end to end.
 
@@ -245,6 +249,31 @@ TOKEN=$(curl -s -X POST \
   -d "grant_type=client_credentials&client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&scope=https://api.getcloudledger.com/write%20https://api.getcloudledger.com/read" \
   | jq -r '.access_token')
 ```
+
+---
+
+## CI / CD (GitHub Actions)
+
+Five workflows implement the pipeline **build → unit + Testcontainers + Floci → ECR → rolling ECS deploy**.
+
+**CI runs on every branch.** `api-tests.yml` (unit + Testcontainers), `docker-image.yml` (Floci build + `/actuator/health`), `lambdas.yml` (pytest/ruff/mypy + Lambda smoke tests), and `terraform-validate.yml` (`fmt` + `validate`) trigger on `push` to any branch **and** on PRs to `master` — so a new feature branch gets feedback before a PR exists. A `concurrency` group cancels superseded runs. The image-push jobs are gated to `master` merges and push to the **Floci** registry (not prod).
+
+**CD ships prod on a version tag.** `deploy-prod.yml` triggers on a semver tag:
+
+```bash
+git tag v1.2.3 && git push origin v1.2.3
+```
+
+It runs in the `prod` GitHub Environment and:
+
+1. **Assumes AWS via GitHub OIDC** — `role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}`, no long-lived keys stored. The role is provisioned in `modules/bootstrap`, its trust scoped to exactly `repo:<owner>/<repo>:environment:prod`.
+2. **Builds + pushes** the API image tagged with the immutable release tag **and** commit SHA (never `:latest` for prod).
+3. **`terraform apply`** (`TF_VAR_api_image_tag`, `TF_VAR_git_commit`, `TF_VAR_rds_password`) — the task def pins `:v1.2.3`, so ECS performs a **rolling deploy** automatically. Each new task applies pending Flyway migrations on startup from inside the VPC (`spring.flyway.enabled: true` in prod).
+4. **Waits for the service to stabilise**, then asserts `/actuator/info` reports the deployed tag.
+
+**Knowing what's running in prod** — three complementary signals: the ECS task definition pins an **immutable image tag** (`describe-task-definition` is the source of truth, and rollback = redeploy the prior revision); the task def injects **`APP_VERSION` / `GIT_COMMIT` env vars** (visible in the ECS console without decoding the image URI); and **`GET /actuator/info`** returns `app.version` + `git.commit` from those env vars, so you can ask a live instance directly.
+
+Prerequisites: run the bootstrap above, then set `AWS_DEPLOY_ROLE_ARN` (variable) and `TF_VAR_RDS_PASSWORD` (secret) on the `prod` environment.
 
 ---
 

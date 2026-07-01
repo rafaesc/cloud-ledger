@@ -1,0 +1,148 @@
+name: Deploy Prod
+
+# Continuous delivery to real prod AWS. Cut a release by pushing a semver tag on
+# an already-tested master commit:
+#
+#   git tag v1.2.3 && git push origin v1.2.3
+#
+# CD then: builds the API image tagged with the immutable release tag + commit
+# SHA, pushes both to ECR, and runs `terraform apply` — which registers a new
+# task-def revision pinned to that exact tag (image :v1.2.3, APP_VERSION/GIT_COMMIT
+# env vars), so ECS performs a rolling deploy onto the new image automatically.
+#
+# Knowing what's deployed:
+#   * ECS console → task def → Environment shows APP_VERSION / GIT_COMMIT.
+#   * `aws ecs describe-task-definition` shows the pinned image tag :v1.2.3.
+#   * `GET /actuator/info` on a live instance returns the same version + commit.
+#   * The repo Environments tab records each release (environment: prod below).
+#
+# NOTE: tags are excluded from the CI workflows (their `branches` filters never
+# match tag refs), so the unit/Testcontainers/Floci suites do NOT re-run here —
+# the tagged commit is assumed green from its branch/PR run.
+#
+# NOTE: Flyway migrations are NOT run from this runner (Aurora is in private
+# subnets, unreachable from GitHub-hosted runners). They don't need to be: the
+# prod Spring profile sets spring.flyway.enabled=true, so each new ECS task
+# applies pending migrations on startup from inside the VPC. Flyway's schema lock
+# makes the concurrent rollout tasks safe (one migrates, the rest wait).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write   # required to request the GitHub OIDC token for AWS role assumption
+
+# One prod deploy at a time; never cancel an in-flight rollout.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+  ECR_REGISTRY: 253095829967.dkr.ecr.us-east-1.amazonaws.com
+  API_IMAGE: 253095829967.dkr.ecr.us-east-1.amazonaws.com/cloudledger/api
+  ECS_CLUSTER: cloudledger-prod
+  ECS_SERVICE: cloudledger-prod-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # The `prod` GitHub Environment holds the secrets below and records a
+    # deployment entry (visible in the repo Environments tab) for each release.
+    # Add a required-reviewers protection rule here to gate prod on approval.
+    environment: prod
+
+    env:
+      # AWS credentials are assumed via OIDC below — no long-lived keys stored.
+      # Already configured by you in the prod environment.
+      TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
+      # Immutable release tag + commit that flow into the task definition.
+      TF_VAR_api_image_tag: ${{ github.ref_name }}
+      TF_VAR_git_commit: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Exchanges the GitHub OIDC token for short-lived AWS STS credentials and
+      # exports them as env vars for every step below (Terraform + AWS CLI).
+      # AWS_DEPLOY_ROLE_ARN is a plain (non-secret) variable on the prod environment.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+
+      - name: Build API image
+        run: |
+          docker build \
+            -t ${{ env.API_IMAGE }}:${{ github.ref_name }} \
+            -t ${{ env.API_IMAGE }}:${{ github.sha }} \
+            ./api
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Push API image (immutable tags)
+        run: |
+          docker push ${{ env.API_IMAGE }}:${{ github.ref_name }}
+          docker push ${{ env.API_IMAGE }}:${{ github.sha }}
+
+      # Registers a new task-def revision pinned to :${github.ref_name} with the
+      # APP_VERSION / GIT_COMMIT env vars. The service's task_definition arn
+      # changes, so ECS starts a rolling deployment automatically — no
+      # --force-new-deployment needed (that hack only exists to reroll :latest).
+      - name: Terraform apply (roll ECS onto the new image)
+        working-directory: terraform/envs/prod
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+
+      - name: Wait for service to stabilise
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"
+
+      # Confirms the live instance reports exactly the version we just deployed,
+      # closing the loop between the git tag and what's actually serving traffic.
+      - name: Smoke test + verify deployed version
+        working-directory: terraform/envs/prod
+        run: |
+          ALB=$(terraform output -raw alb_dns_name)
+
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "http://${ALB}/actuator/health" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (HTTP 200)"
+              break
+            fi
+            echo "Attempt $i: health HTTP $STATUS — waiting..."
+            sleep 10
+            if [ "$i" = "30" ]; then
+              echo "Prod did not become healthy in time"
+              exit 1
+            fi
+          done
+
+          INFO=$(curl -s "http://${ALB}/actuator/info")
+          echo "Deployed info: $INFO"
+          DEPLOYED_VERSION=$(echo "$INFO" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('app',{}).get('version',''))")
+
+          if [ "$DEPLOYED_VERSION" = "${{ github.ref_name }}" ]; then
+            echo "Verified: prod is running ${{ github.ref_name }}"
+          else
+            echo "Version mismatch: expected ${{ github.ref_name }}, got '$DEPLOYED_VERSION'"
+            exit 1
+          fi

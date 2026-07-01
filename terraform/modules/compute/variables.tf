@@ -138,6 +138,29 @@ variable "spring_profiles_active" {
   default     = "prod"
 }
 
+variable "api_image_tag" {
+  description = <<-EOT
+    Image tag the API task definition pulls. In prod this must be an IMMUTABLE
+    release tag (e.g. v1.2.3) so the running task definition is the source of
+    truth for "what version is deployed" and rollback is deterministic. Defaults
+    to "latest" for local/Floci, where mutable tags are fine. Also surfaced to
+    the app as the APP_VERSION env var (see /actuator/info).
+  EOT
+  type        = string
+  default     = "latest"
+}
+
+variable "git_commit" {
+  description = <<-EOT
+    Git commit SHA of the deployed build. Injected into the API task def as the
+    GIT_COMMIT env var so it is visible in the ECS console (task definition →
+    Environment) without decoding the image URI, and served at /actuator/info.
+    Empty locally.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "aws_access_key_id" {
   description = <<-EOT
     AWS access key ID injected into the ECS container environment.

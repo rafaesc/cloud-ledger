@@ -49,4 +49,18 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info
+  info:
+    # Enable the environment info contributor so the info.* properties below
+    # (sourced from the APP_VERSION / GIT_COMMIT env vars injected by the ECS
+    # task def) are served at /actuator/info. Lets you curl a live instance for
+    # exactly which version is running. Off by default in Spring Boot.
+    env:
+      enabled: true
+
+info:
+  app:
+    name: cloudledger-api
+    version: ${APP_VERSION:dev}
+  git:
+    commit: ${GIT_COMMIT:unknown}

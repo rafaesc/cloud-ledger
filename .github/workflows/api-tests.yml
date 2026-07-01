@@ -2,17 +2,28 @@ name: API Tests
 
 on:
   push:
-    branches: [master]
+    # Run on every branch (feature branches included) so a new branch gets CI
+    # before a PR exists. Tag pushes are excluded (a `branches` filter never
+    # matches tags) — releases go through deploy-prod.yml instead.
+    branches:
+      - '**'
     paths:
       - 'api/**'
+      - '.github/workflows/api-tests.yml'
   pull_request:
     branches: [master]
     paths:
       - 'api/**'
+      - '.github/workflows/api-tests.yml'
 
 permissions:
   contents: read
   actions: write
+
+# Cancel superseded runs on the same ref so rapid pushes don't queue up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
