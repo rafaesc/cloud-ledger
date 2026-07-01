@@ -85,4 +85,13 @@ module "observability" {
   # Index every sampled span into the searchable trace store. Without this the default (1%)
   # means the X-Ray traces console shows almost nothing even though spans reach aws/spans.
   indexing_percentage = 100
+
+  # CloudWatch operations dashboard inputs.
+  aws_region              = var.region
+  alb_arn_suffix          = module.compute.alb_arn_suffix
+  target_group_arn_suffix = module.compute.target_group_arn_suffix
+  api_log_group_name      = module.compute.api_log_group_name
+  main_queue_name         = module.messaging.queue_name
+  dlq_name                = module.messaging.dlq_name
+  redis_node_id           = module.storage.redis_node_id
 }

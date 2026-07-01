@@ -6,6 +6,7 @@ import com.getcloudledger.api.shared.domain.DomainError;
 import com.getcloudledger.api.shared.domain.bus.command.CommandBus;
 import com.getcloudledger.api.shared.spring.ApiController;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 
+@Slf4j
 @RestController
 @RequestMapping("/v1/transfers")
 public class TransferController extends ApiController {
@@ -34,6 +36,11 @@ public class TransferController extends ApiController {
                 request.amount(),
                 request.transferId()
         ));
+        // Structured marker consumed by the CloudWatch Logs metric filter that powers the
+        // "transfer rate" dashboard widget (observability module). dispatch() is synchronous,
+        // so reaching this line means the transfer committed.
+        log.info("TRANSFER_COMPLETED transferId={} sourceAccountId={} amount={}",
+                request.transferId(), request.sourceAccountId(), request.amount());
     }
 
     @Override

@@ -6,11 +6,13 @@ on:
     paths:
       - 'api/**'
       - 'terraform/**'
+      - '.github/workflow/docker-image.yml'
   pull_request:
     branches: [master]
     paths:
       - 'api/**'
       - 'terraform/**'
+      - '.github/workflow/docker-image.yml'
 
 permissions:
   contents: read

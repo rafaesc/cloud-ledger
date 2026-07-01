@@ -7,12 +7,14 @@ on:
       - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
+      - '.github/workflow/lambdas.yml'
   pull_request:
     branches: [master]
     paths:
       - 'api/src/main/resources/db/**'
       - 'lambdas/**'
       - 'terraform/**'
+      - '.github/workflow/lambdas.yml'
 
 permissions:
   contents: read
