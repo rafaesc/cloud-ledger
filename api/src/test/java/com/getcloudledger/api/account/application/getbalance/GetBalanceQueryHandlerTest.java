@@ -13,7 +13,10 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @DisplayName("GetBalanceQueryHandler")
@@ -56,6 +59,36 @@ class GetBalanceQueryHandlerTest {
 
         assertEquals(500_00L, response.balanceCents());
         assertEquals(accountId.toString(), response.accountId());
+    }
+
+    @Test
+    @DisplayName("handle | warms Redis with the DynamoDB balance on cache miss")
+    void handle_warms_cache_on_cache_miss() {
+        var accountId = UUID.randomUUID();
+        var balanceView = new AccountProjectionPort.AccountBalanceView(
+                accountId.toString(), 500_00L, "USD", 5L, "2026-06-12T09:00:00.000Z"
+        );
+        when(projectionPort.findAccountBalance(accountId)).thenReturn(balanceView);
+        when(balanceCache.get(accountId)).thenReturn(Optional.empty());
+
+        handler.handle(new GetBalanceQuery(accountId));
+
+        verify(balanceCache).put(accountId, new BigDecimal("500.00"));
+    }
+
+    @Test
+    @DisplayName("handle | does not re-write cache on cache hit")
+    void handle_does_not_write_cache_on_cache_hit() {
+        var accountId = UUID.randomUUID();
+        var balanceView = new AccountProjectionPort.AccountBalanceView(
+                accountId.toString(), 300_00L, "USD", 3L, "2026-06-11T14:25:00.000Z"
+        );
+        when(projectionPort.findAccountBalance(accountId)).thenReturn(balanceView);
+        when(balanceCache.get(accountId)).thenReturn(Optional.of(new BigDecimal("375.00")));
+
+        handler.handle(new GetBalanceQuery(accountId));
+
+        verify(balanceCache, never()).put(any(), any());
     }
 
     @Test

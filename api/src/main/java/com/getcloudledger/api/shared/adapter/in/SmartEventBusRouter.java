@@ -71,8 +71,6 @@ public class SmartEventBusRouter implements EventBus {
                         aggregateType, snapshot.size());
                 try {
                     sqsEventBus.publish(aggregateType, snapshot);
-                    log.info("SQS publish succeeded for aggregateType={} events={}",
-                            aggregateType, snapshot.size());
                 } catch (Exception ex) {
                     log.warn("SQS publish failed for aggregateType={}, writing {} row(s) to outbox",
                             aggregateType, outboxRows.size(), ex);

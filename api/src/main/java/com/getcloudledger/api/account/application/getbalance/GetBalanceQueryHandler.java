@@ -25,7 +25,11 @@ public class GetBalanceQueryHandler implements QueryHandler<GetBalanceQuery, Get
 
         long balanceCents = cachedBalance(query.getAccountId())
                 .map(b -> b.multiply(BigDecimal.valueOf(100)).longValue())
-                .orElse(balanceView.balanceCents());
+                .orElseGet(() -> {
+                    long fallbackCents = balanceView.balanceCents();
+                    warmCache(query.getAccountId(), fallbackCents);
+                    return fallbackCents;
+                });
 
         return new GetBalanceResponse(
                 balanceView.accountId(),
@@ -42,6 +46,15 @@ public class GetBalanceQueryHandler implements QueryHandler<GetBalanceQuery, Get
                     () -> balanceCache.get(accountId)).get();
         } catch (Exception e) {
             return Optional.empty();
+        }
+    }
+
+    private void warmCache(UUID accountId, long balanceCents) {
+        try {
+            CircuitBreaker.decorateRunnable(balanceCacheCircuitBreaker,
+                    () -> balanceCache.put(accountId, BigDecimal.valueOf(balanceCents, 2))).run();
+        } catch (Exception e) {
+            // best-effort cache warming; a Redis failure must never break the read path
         }
     }
 }
