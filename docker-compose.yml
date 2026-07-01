@@ -1,7 +1,7 @@
 services:
 
   floci:
-    image: floci/floci:latest
+    image: floci/floci:1.5.25   # pinned: floci:latest regressed RDS ListTagsForResource (404 DBInstanceNotFound on db_subnet_group), breaking CI terraform apply
     container_name: floci
     ports:
       - "4566:4566"

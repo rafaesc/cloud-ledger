@@ -8,6 +8,7 @@ on:
       - 'lambdas/**'
       - 'terraform/**'
       - '.github/workflow/lambdas.yml'
+      - 'docker-compose.yml'
   pull_request:
     branches: [master]
     paths:

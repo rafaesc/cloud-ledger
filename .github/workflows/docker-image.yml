@@ -7,6 +7,7 @@ on:
       - 'api/**'
       - 'terraform/**'
       - '.github/workflow/docker-image.yml'
+      - 'docker-compose.yml'
   pull_request:
     branches: [master]
     paths:
