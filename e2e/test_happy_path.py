@@ -22,7 +22,7 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-def _dynamo_item(dynamo, table: str, pk: str, sk: str) -> dict | None:
+def _dynamo_item(dynamo: Any, table: str, pk: str, sk: str) -> dict[Any, Any] | None:
     resp = dynamo.get_item(
         TableName=table,
         Key={"PK": {"S": pk}, "SK": {"S": sk}},
@@ -104,7 +104,7 @@ class TestHappyPath:
         )
         assert resp.status_code == 201
 
-    def test_transfer(self, api_url, api_token, happy_path_ids):
+    def test_transfer(self, api_url:str, api_token: str, happy_path_ids: dict[str, str]):
         resp = requests.post(
             f"{api_url}/v1/transfers",
             headers=_headers(api_token),

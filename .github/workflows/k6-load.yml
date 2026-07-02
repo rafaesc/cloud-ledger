@@ -1,0 +1,119 @@
+name: k6 load (manual)
+
+# Heavy load / stress run — the second tier of the two-tier standard. Unlike the
+# per-version k6 smoke GATE (which runs automatically inside deploy-prod.yml), this
+# is a CHARACTERIZATION run, not a merge/deploy blocker:
+#
+#   * Trigger is MANUAL (workflow_dispatch) — a human clicks "Run workflow".
+#   * Execution is automated, logged, and reproducible, and the JSON summary is
+#     captured as a CI artifact (don't run for-the-record loads from a laptop).
+#   * It NEVER runs on push / PR / tag, and NEVER targets literal prod.
+#
+# Guardrails baked in (cost rules are strict — "never leave a generator running"):
+#   * confirm: RUN input      → no accidental clicks
+#   * environment: load-test  → GitHub Environment approval gate + scoped secrets
+#   * timeout-minutes: 20     → hard cap enforcing teardown
+#   * concurrency (no cancel) → never two overlapping runs skewing cost/results
+#
+# Target connection details come from the `load-test` GitHub Environment, NOT from
+# prod Terraform state — configure that environment to point at a dev/sandbox stack
+# you spin up for the run and tear down after. See k6/README.md guardrails.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target env (must be a sandbox — never literal prod)'
+        type: choice
+        options: [dev, prod-sandbox]
+        default: dev
+      scenario:
+        description: 'Scenario to run'
+        type: choice
+        options: [load-transfers, read-balance]
+        default: load-transfers
+      target_tps:
+        description: 'Arrival rate in req/s (drives TARGET_RPS / READ_RPS)'
+        type: string
+        default: '300'
+      duration:
+        description: 'Hold duration, e.g. 5m (drives HOLD / DURATION)'
+        type: string
+        default: '5m'
+      confirm:
+        description: "Type RUN to confirm — guards against accidental clicks"
+        required: true
+        default: ''
+
+run-name: "k6 load: ${{ inputs.scenario }} @ ${{ inputs.target_tps }} rps → ${{ inputs.target }} (by @${{ github.actor }})"
+
+# Never two load runs at once (overlap skews both cost and results).
+concurrency:
+  group: k6-load
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Pinned k6 binary (bump here). Installed from the GitHub release tarball rather
+  # than a third-party action, to match this repo's action SHA-pinning hygiene.
+  K6_VERSION: v0.55.0
+
+jobs:
+  load:
+    # Typing anything other than RUN skips the job (the guard against accidental clicks).
+    if: ${{ inputs.confirm == 'RUN' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The load-test GitHub Environment supplies the target connection details and,
+    # with a required-reviewers protection rule, an approval gate. Point it at a
+    # dev/sandbox stack — NEVER at literal prod.
+    environment: load-test
+
+    env:
+      BASE_URL: ${{ vars.K6_BASE_URL }}
+      TOKEN_URL: ${{ vars.K6_TOKEN_URL }}
+      CLIENT_ID: ${{ vars.K6_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.K6_CLIENT_SECRET }}
+      # One TPS input drives whichever knob the chosen scenario reads.
+      TARGET_RPS: ${{ inputs.target_tps }}
+      READ_RPS: ${{ inputs.target_tps }}
+      # One duration input drives the hold stage of either scenario.
+      HOLD: ${{ inputs.duration }}
+      DURATION: ${{ inputs.duration }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Guardrail — require a configured, non-prod target
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
+            echo "::error::load-test environment is not configured. Set K6_BASE_URL / K6_TOKEN_URL / K6_CLIENT_ID vars and the K6_CLIENT_SECRET secret to a SANDBOX stack."
+            exit 1
+          fi
+          echo "Target: ${{ inputs.target }} → $BASE_URL"
+          echo "Scenario: ${{ inputs.scenario }} | tps=$TARGET_RPS | hold=$HOLD"
+
+      - name: Install k6
+        run: |
+          curl -sSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar xzf - --strip-components=1 -C /usr/local/bin "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      - name: Run k6 ${{ inputs.scenario }}
+        run: |
+          mkdir -p k6/results
+          # --summary-export keeps the artifact compact (the numbers you screenshot).
+          # For full per-request analysis add: --out json=k6/results/${{ inputs.scenario }}.json
+          k6 run \
+            --summary-export "k6/results/${{ inputs.scenario }}-summary.json" \
+            "k6/scenarios/${{ inputs.scenario }}.js"
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: k6-${{ inputs.scenario }}-results
+          path: k6/results/
+          if-no-files-found: warn

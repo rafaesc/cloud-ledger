@@ -178,6 +178,8 @@ cloud-ledger/
 │       ├── local-bootstrap.sh  # full setup from scratch
 │       ├── local-destroy.sh    # full teardown
 │       └── local-import.sh     # recover orphaned resources into Terraform state
+├── e2e/                        # pytest: full pipeline against a running local stack
+├── k6/                         # k6 load/verification suite (smoke gate, load, conflict, read)
 └── README.md
 ```
 
@@ -254,7 +256,7 @@ TOKEN=$(curl -s -X POST \
 
 ## CI / CD (GitHub Actions)
 
-Five workflows implement the pipeline **build → unit + Testcontainers + Floci → ECR → rolling ECS deploy**.
+Six workflows implement the pipeline **build → unit + Testcontainers + Floci → ECR → rolling ECS deploy → k6 smoke gate**.
 
 **CI runs on every branch.** `api-tests.yml` (unit + Testcontainers), `docker-image.yml` (Floci build + `/actuator/health`), `lambdas.yml` (pytest/ruff/mypy + Lambda smoke tests), and `terraform-validate.yml` (`fmt` + `validate`) trigger on `push` to any branch **and** on PRs to `master` — so a new feature branch gets feedback before a PR exists. A `concurrency` group cancels superseded runs. The image-push jobs are gated to `master` merges and push to the **Floci** registry (not prod).
 
@@ -270,10 +272,26 @@ It runs in the `prod` GitHub Environment and:
 2. **Builds + pushes** the API image tagged with the immutable release tag **and** commit SHA (never `:latest` for prod).
 3. **`terraform apply`** (`TF_VAR_api_image_tag`, `TF_VAR_git_commit`, `TF_VAR_rds_password`) — the task def pins `:v1.2.3`, so ECS performs a **rolling deploy** automatically. Each new task applies pending Flyway migrations on startup from inside the VPC (`spring.flyway.enabled: true` in prod).
 4. **Waits for the service to stabilise**, then asserts `/actuator/info` reports the deployed tag.
+5. **Runs the k6 smoke gate** (`k6/scenarios/smoke.js`) against the deployed ALB — 1 VU × 10 transfers end-to-end; a failed check or projection-lag threshold **fails the release**. The heavy load run is a *separate*, manually dispatched workflow — never a per-version gate (see [Load & Verification Testing](#load--verification-testing-k6)).
 
 **Knowing what's running in prod** — three complementary signals: the ECS task definition pins an **immutable image tag** (`describe-task-definition` is the source of truth, and rollback = redeploy the prior revision); the task def injects **`APP_VERSION` / `GIT_COMMIT` env vars** (visible in the ECS console without decoding the image URI); and **`GET /actuator/info`** returns `app.version` + `git.commit` from those env vars, so you can ask a live instance directly.
 
 Prerequisites: run the bootstrap above, then set `AWS_DEPLOY_ROLE_ARN` (variable) and `TF_VAR_RDS_PASSWORD` (secret) on the `prod` environment.
+
+---
+
+## Load & Verification Testing (k6)
+
+The `k6/` suite is the "prove it" layer — it drives the running API and asserts the correctness and latency guarantees the design claims. It runs against local Floci or dev AWS; `BASE_URL` and Cognito credentials come from `__ENV` (defaults target local Floci). See [`k6/README.md`](k6/README.md) for run commands and the full threshold table.
+
+**Two-tier by design.** A slow, costly load run makes a terrible merge blocker, so the suite splits cleanly:
+
+- **Per-version smoke gate** — `k6/scenarios/smoke.js` (1 VU × 10 transfers, end-to-end) runs automatically inside `deploy-prod.yml` after the rollout, against the deployed ALB. A failed check or projection-lag threshold **fails the release**. Cheap and safe to gate on.
+- **On-demand load run** — `k6-load.yml` is `workflow_dispatch`-only, guardrailed against accidents and cost (a typed `confirm: RUN`, an approval-gated `load-test` environment, a hard `timeout-minutes`, and no-overlap concurrency). It targets a **sandbox**, never literal prod — a characterization run, not a gate.
+
+**k6 asserts what a client can observe; CloudWatch owns the rest.** k6 gates the client-side subset — transfer-write p99, projection freshness (`projection_lag`, a client-observed read-after-write measurement), check pass-rate, and error rate. The server-internal SLOs — HikariCP connection-acquire p99, DynamoDB GSI write-capacity, Redis cache-hit ratio — are read off the CloudWatch ops dashboard, not guessed at from HTTP responses. Drawing that line at the HTTP boundary is deliberate.
+
+**Scenarios:** `smoke.js` (end-to-end write→project→read + idempotent-replay proof), `conflict.js` (the concurrent-conflict demo below — fires N simultaneous same-version debits and asserts exactly one `201`, the rest `409`, no double-spend, and the loser succeeds on retry), `load-transfers.js` (ramping to ~300 req/s), and `read-balance.js` (steady cache reads). All scenarios are declarative — auth, idempotency-key generation, and request tagging live in `k6/lib/`, not the scenario files.
 
 ---
 

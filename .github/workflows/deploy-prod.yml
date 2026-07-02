@@ -46,6 +46,9 @@ env:
   API_IMAGE: 253095829967.dkr.ecr.us-east-1.amazonaws.com/cloudledger/api
   ECS_CLUSTER: cloudledger-prod
   ECS_SERVICE: cloudledger-prod-api
+  # Pinned k6 binary (bump here). Installed from the GitHub release tarball rather
+  # than a third-party action, to match this repo's action SHA-pinning hygiene.
+  K6_VERSION: v0.55.0
 
 jobs:
   deploy:
@@ -115,7 +118,7 @@ jobs:
 
       # Confirms the live instance reports exactly the version we just deployed,
       # closing the loop between the git tag and what's actually serving traffic.
-      - name: Smoke test + verify deployed version
+      - name: Verify deployment (health + /actuator/info)
         working-directory: terraform/envs/prod
         run: |
           ALB=$(terraform output -raw alb_dns_name)
@@ -146,3 +149,39 @@ jobs:
             echo "Version mismatch: expected ${{ github.ref_name }}, got '$DEPLOYED_VERSION'"
             exit 1
           fi
+
+      # ── Per-version k6 smoke gate ─────────────────────────────────────────────
+      # The cheap E2E correctness/perf gate that runs on EVERY release, right after
+      # the rollout: 1 VU × 10 transfers through the full write→project→read path
+      # against the just-deployed prod ALB. A broken k6 threshold (failed check or
+      # projection-lag SLO) exits non-zero and FAILS the release loudly.
+      #
+      # This is the *per-version* protection. The heavy load/stress run is a
+      # separate, manually-dispatched workflow (k6-load.yml) — deliberately NOT a
+      # per-version gate (slow, costly, and a poor merge blocker).
+      #
+      # The gate reaches only PUBLIC prod endpoints (ALB + Cognito hosted-UI token
+      # endpoint), both routable from a GitHub-hosted runner (unlike Aurora/Flyway,
+      # which sit in private subnets). smoke.js uses random UUIDs, so it appends
+      # throwaway accounts to the immutable ledger — acceptable with no live users.
+      #
+      # NOTE: the rollout has already happened by this point, so a failed gate does
+      # not auto-rollback; roll back by re-deploying the prior tag's task-def
+      # revision (see repo CD docs). The gate's job is to surface a bad release.
+      - name: Install k6
+        run: |
+          curl -sSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar xzf - --strip-components=1 -C /usr/local/bin "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      - name: k6 smoke gate (E2E)
+        working-directory: terraform/envs/prod
+        env:
+          # Cognito hosted-UI domain is cloudledger-<env> (modules/auth) — standard
+          # amazoncognito.com token endpoint, not a custom domain.
+          TOKEN_URL: https://cloudledger-prod.auth.us-east-1.amazoncognito.com/oauth2/token
+        run: |
+          export BASE_URL="http://$(terraform output -raw alb_dns_name)"
+          export CLIENT_ID="$(terraform output -raw cognito_client_id)"
+          export CLIENT_SECRET="$(terraform output -json cognito_client_secret | jq -r .)"
+          k6 run "$GITHUB_WORKSPACE/k6/scenarios/smoke.js"

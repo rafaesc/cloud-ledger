@@ -41,6 +41,10 @@ build/
 .mypy_cache/
 .ruff_cache/
 
+# k6 load-test outputs (JSON summaries, screenshots) — keep the dir, ignore contents
+k6/results/*
+!k6/results/.gitkeep
+
 # Terraform
 **/.terraform/
 *.tfstate

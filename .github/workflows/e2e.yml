@@ -1,0 +1,104 @@
+name: E2E
+
+# Full-stack end-to-end suite: Floci + deployed Lambdas + API in ECS/ALB.
+# This is the only test of the async cross-service pipeline (API -> Aurora
+# events/outbox -> direct SQS publish -> projector -> DynamoDB -> query
+# endpoints + Cognito M2M auth). It is the heaviest job, so it is reserved for
+# merge gating (PRs into master) + post-merge safety (push to master) + manual
+# runs -- deliberately NOT run on every feature-branch push.
+#
+# Setup is delegated to terraform/scripts/local-bootstrap.sh so the CI path and
+# the documented local path stay the same single source of truth. Only the
+# genuinely CI-specific tail lives here: wait for the ECS task to converge on
+# the ALB, run pytest, and dump logs on failure.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'api/**'
+      - 'lambdas/**'
+      - 'terraform/**'
+      - 'e2e/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'api/**'
+      - 'lambdas/**'
+      - 'terraform/**'
+      - 'e2e/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+
+      # Java is needed because local-bootstrap.sh runs ./gradlew flywayMigrate.
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: gradle
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          working-directory: e2e
+
+      # Single source of truth for local setup: compose up -> terraform apply ->
+      # build+push all three images -> flyway migrate. Same script developers run.
+      - name: Bootstrap local stack
+        run: bash terraform/scripts/local-bootstrap.sh
+
+      # CI-specific: the script ends at flyway; the ECS task may still be pulling
+      # the API image and booting Spring. Wait for it to serve health on the ALB.
+      - name: Wait for API health via ALB (:80)
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost/actuator/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "API healthy (HTTP 200)"
+              curl -s http://localhost/actuator/health | python3 -m json.tool
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — waiting for ECS task to converge..."
+            sleep 5
+          done
+          echo "API did not become healthy on the ALB in time"
+          exit 1
+
+      - name: Run e2e suite
+        working-directory: e2e
+        run: |
+          uv sync --group dev
+          uv run pytest -v
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "===== docker ps ====="
+          docker ps -a
+          echo "===== floci logs (tail) ====="
+          docker compose logs floci 2>&1 | tail -120 || true
+          echo "===== ECS API container logs (tail) ====="
+          for c in $(docker ps -a --format '{{.Names}}' | grep 'floci-ecs.*api'); do
+            echo "----- $c -----"
+            docker logs "$c" 2>&1 | tail -80 || true
+          done
