@@ -52,6 +52,8 @@ The second problem CloudLedger addresses is **concurrent writes**. In a traditio
 │                                                                           │
 │  † if SQS publish fails: outbox rows written (REQUIRES_NEW);             │
 │    EventBridge triggers outbox-poller λ every minute to relay to SQS    │
+│  ‡ EventBridge also triggers cleanup λ daily to prune, from              │
+│    Aurora, expired idempotency keys + published outbox rows >24h         │
 │                                                                           │
 │  ── READ PATH ────────────────────────────────────────────────────────   │
 │  GET /balance       Redis ──(circuit breaker / miss)──▶ DynamoDB         │
@@ -161,7 +163,8 @@ cloud-ledger/
 ├── lambdas/                    # Python 3.12 (uv-managed)
 │   ├── shared/                 # db.py, sqs.py, dynamo.py connection factories
 │   ├── outbox_poller/          # polls outbox → SQS relay
-│   └── projector/              # SQS consumer → DynamoDB writer
+│   ├── projector/              # SQS consumer → DynamoDB writer
+│   └── cleanup/                # scheduled retention: prunes expired idempotency keys + old outbox rows
 ├── terraform/
 │   ├── envs/
 │   │   ├── local/              # Floci-backed local environment (local state)

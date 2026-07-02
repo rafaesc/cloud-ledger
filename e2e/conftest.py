@@ -76,6 +76,17 @@ def dynamo_table() -> str:
 
 
 @pytest.fixture(scope="session")
+def lambda_client() -> boto3.client:
+    return boto3.client(
+        "lambda",
+        endpoint_url=os.getenv("E2E_LAMBDA_ENDPOINT", "http://localhost:4566"),
+        region_name="us-east-1",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
+
+
+@pytest.fixture(scope="session")
 def happy_path_ids() -> dict[str, str]:
     return {
         "account1": str(uuid.uuid4()),

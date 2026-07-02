@@ -47,7 +47,7 @@ docker push "$PROJECTOR_REPO:latest"
 
 echo "==> Building cleanup image..."
 docker build \
-  -t "$PROJECTOR_REPO:latest" \
+  -t "$CLEANUP_REPO:latest" \
   -f "$REPO_ROOT/lambdas/cleanup/Dockerfile" \
   "$REPO_ROOT/lambdas"
 
