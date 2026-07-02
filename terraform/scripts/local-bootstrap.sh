@@ -10,6 +10,7 @@ export AWS_ENDPOINT_URL=http://localhost:4566
 
 OUTBOX_REPO=localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller
 PROJECTOR_REPO=localhost:5100/000000000000/us-east-1/cloudledger/projector
+CLEANUP_REPO=localhost:5100/000000000000/us-east-1/cloudledger/cleanup
 API_REPO=localhost:5100/000000000000/us-east-1/cloudledger/api
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -43,6 +44,15 @@ docker build \
 
 echo "==> Pushing projector image to Floci ECR..."
 docker push "$PROJECTOR_REPO:latest"
+
+echo "==> Building cleanup image..."
+docker build \
+  -t "$PROJECTOR_REPO:latest" \
+  -f "$REPO_ROOT/lambdas/cleanup/Dockerfile" \
+  "$REPO_ROOT/lambdas"
+
+echo "==> Pushing cleanup image to Floci ECR..."
+docker push "$CLEANUP_REPO:latest"
 
 echo "==> Building API image..."
 docker build \

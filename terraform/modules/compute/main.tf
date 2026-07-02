@@ -85,6 +85,13 @@ resource "aws_ecr_repository" "projector" {
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
 
+resource "aws_ecr_repository" "cleanup" {
+  name         = "cloudledger/cleanup"
+  force_delete = true
+
+  tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
 # ── IAM — Lambda ─────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "lambda" {
@@ -176,9 +183,52 @@ resource "aws_cloudwatch_log_group" "outbox_poller" {
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
 
+resource "aws_cloudwatch_log_group" "cleanup" {
+  name              = "/aws/lambda/cleanup"
+  retention_in_days = 7
+
+  tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
 resource "aws_cloudwatch_log_group" "projector" {
   name              = "/aws/lambda/projector"
   retention_in_days = 7
+
+  tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
+}
+
+# ── Lambda ─ cleanup ─────────────────────────────────────────────────────────
+
+resource "aws_lambda_function" "cleanup" {
+  function_name = "cleanup"
+  role          = aws_iam_role.lambda.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.cleanup.repository_url}:latest"
+  timeout       = 30
+
+  environment {
+    variables = merge({
+      DB_HOST     = var.db_host
+      DB_PORT     = tostring(var.db_port)
+      DB_NAME     = var.db_name
+      DB_USER     = var.db_user
+      DB_PASSWORD = var.db_password
+      DB_SSLMODE  = var.db_sslmode
+      },
+      local.otel_lambda_env,
+      local.otel_enabled ? { OTEL_RESOURCE_ATTRIBUTES = "service.name=cleanup,deployment.environment=${var.env}" } : {}
+    )
+  }
+
+  logging_config {
+    log_group  = aws_cloudwatch_log_group.cleanup.name
+    log_format = "Text"
+  }
+
+  vpc_config {
+    subnet_ids         = var.subnet_ids
+    security_group_ids = [var.lambda_sg_id]
+  }
 
   tags = { Name = "cloudledger-${var.env}", Project = "cloud-ledger" }
 }
@@ -280,9 +330,12 @@ resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.main.arn
+      Effect = "Allow"
+      Action = "lambda:InvokeFunction"
+      Resource = [
+        aws_lambda_function.main.arn,
+        aws_lambda_function.cleanup.arn,
+      ]
     }]
   })
 }
@@ -307,6 +360,22 @@ resource "aws_scheduler_schedule" "main" {
 
   target {
     arn      = aws_lambda_function.main.arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+resource "aws_scheduler_schedule" "cleanup" {
+  name       = "cleanup"
+  group_name = aws_scheduler_schedule_group.main.name
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression = "rate(24 hours)"
+
+  target {
+    arn      = aws_lambda_function.cleanup.arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

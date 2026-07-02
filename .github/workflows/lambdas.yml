@@ -29,6 +29,7 @@ concurrency:
 env:
   OUTBOX_POLLER_IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/outbox-poller
   PROJECTOR_IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/projector
+  CLEANUP_IMAGE: localhost:5100/000000000000/us-east-1/cloudledger/cleanup
 
 jobs:
   test:
@@ -82,6 +83,15 @@ jobs:
             -t ${{ env.PROJECTOR_IMAGE }}:${{ github.sha }} \
             -t ${{ env.PROJECTOR_IMAGE }}:latest \
             -f projector/Dockerfile \
+            .
+        working-directory: lambdas
+
+      - name: Build cleanup image
+        run: |
+          docker build \
+            -t ${{ env.CLEANUP_IMAGE }}:${{ github.sha }} \
+            -t ${{ env.CLEANUP_IMAGE }}:latest \
+            -f cleanup/Dockerfile \
             .
         working-directory: lambdas
 
@@ -152,6 +162,11 @@ jobs:
             -t ${{ env.PROJECTOR_IMAGE }}:latest \
             -f projector/Dockerfile \
             .
+          docker build \
+            -t ${{ env.CLEANUP_IMAGE }}:${{ github.sha }} \
+            -t ${{ env.CLEANUP_IMAGE }}:latest \
+            -f cleanup/Dockerfile \
+            .
         working-directory: lambdas
 
       - name: Login to ECR
@@ -169,6 +184,11 @@ jobs:
           docker push ${{ env.PROJECTOR_IMAGE }}:${{ github.sha }}
           docker push ${{ env.PROJECTOR_IMAGE }}:latest
 
+      - name: Push cleanup image
+        run: |
+          docker push ${{ env.CLEANUP_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.CLEANUP_IMAGE }}:latest
+
       - name: Update outbox-poller Lambda
         run: |
           aws lambda update-function-code \
@@ -181,6 +201,13 @@ jobs:
           aws lambda update-function-code \
             --function-name projector \
             --image-uri ${{ env.PROJECTOR_IMAGE }}:${{ github.sha }} \
+            --endpoint-url $AWS_ENDPOINT_URL
+
+      - name: Update cleanup Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name cleanup \
+            --image-uri ${{ env.CLEANUP_IMAGE }}:${{ github.sha }} \
             --endpoint-url $AWS_ENDPOINT_URL
 
       - name: Smoke test outbox-poller
@@ -216,5 +243,22 @@ jobs:
             echo "projector smoke test passed"
           else
             echo "projector smoke test FAILED"
+            exit 1
+          fi
+
+      - name: Smoke test cleanup
+        run: |
+          aws lambda invoke \
+            --function-name cleanup \
+            /tmp/cleanup-out.json \
+            --endpoint-url $AWS_ENDPOINT_URL
+
+          echo "Response:"
+          cat /tmp/cleanup-out.json
+
+          if cat /tmp/cleanup-out.json | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(1 if 'errorMessage' in d else 0)"; then
+            echo "cleanup smoke test passed"
+          else
+            echo "cleanup smoke test FAILED"
             exit 1
           fi
