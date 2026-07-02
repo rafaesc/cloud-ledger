@@ -18,6 +18,11 @@ resource "aws_cognito_resource_server" "api" {
     scope_name        = "read"
     scope_description = "Read account state (future)"
   }
+
+  scope {
+    scope_name        = "admin"
+    scope_description = "Operational admin actions (e.g. rebuild DynamoDB projections)"
+  }
 }
 
 resource "aws_cognito_user_pool_client" "api" {
@@ -26,6 +31,19 @@ resource "aws_cognito_user_pool_client" "api" {
   generate_secret                      = true
   allowed_oauth_flows                  = ["client_credentials"]
   allowed_oauth_scopes                 = ["https://api.getcloudledger.com/read", "https://api.getcloudledger.com/write"]
+  allowed_oauth_flows_user_pool_client = true
+
+  depends_on = [aws_cognito_resource_server.api]
+}
+
+# Separate M2M client for operational/admin tooling. Kept distinct from the app client so the
+# powerful `admin` scope is never handed to the regular read/write workload.
+resource "aws_cognito_user_pool_client" "admin" {
+  name                                 = "m2m-admin-client"
+  user_pool_id                         = aws_cognito_user_pool.main.id
+  generate_secret                      = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["https://api.getcloudledger.com/admin"]
   allowed_oauth_flows_user_pool_client = true
 
   depends_on = [aws_cognito_resource_server.api]

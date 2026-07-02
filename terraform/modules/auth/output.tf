@@ -13,3 +13,14 @@ output "client_secret" {
   value       = aws_cognito_user_pool_client.api.client_secret
   sensitive   = true
 }
+
+output "admin_client_id" {
+  description = "M2M admin app client ID (holds the api/admin scope)"
+  value       = aws_cognito_user_pool_client.admin.id
+}
+
+output "admin_client_secret" {
+  description = "M2M admin app client secret"
+  value       = aws_cognito_user_pool_client.admin.client_secret
+  sensitive   = true
+}

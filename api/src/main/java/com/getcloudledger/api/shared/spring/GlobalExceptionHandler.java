@@ -4,6 +4,7 @@ import com.getcloudledger.api.account.domain.exception.AccountAccessDeniedExcept
 import com.getcloudledger.api.account.domain.exception.AccountNotFoundException;
 import com.getcloudledger.api.account.domain.exception.InsufficientFundsException;
 import com.getcloudledger.api.account.domain.exception.TransferNotAllowedException;
+import com.getcloudledger.api.admin.application.getrebuildjob.RebuildJobNotFoundException;
 import com.getcloudledger.api.shared.domain.exception.ConcurrencyException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleAccountNotFound(AccountNotFoundException e) {
         return ResponseEntity.status(404).body(Map.of("error", "account_not_found"));
+    }
+
+    @ExceptionHandler(RebuildJobNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleRebuildJobNotFound(RebuildJobNotFoundException e) {
+        return ResponseEntity.status(404).body(Map.of("error", "rebuild_job_not_found"));
     }
 
     // Optimistic-lock conflict detected in-memory (EventStore re-reads the stream and finds a

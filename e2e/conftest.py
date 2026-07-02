@@ -49,6 +49,25 @@ def api_token() -> str:
 
 
 @pytest.fixture(scope="session")
+def admin_token() -> str:
+    """M2M token for the separate admin client (api/admin scope) — for /v1/admin/** endpoints."""
+    token_url = os.getenv("E2E_TOKEN_URL", "http://localhost:4566/cognito-idp/oauth2/token")
+    client_id = os.getenv("E2E_ADMIN_CLIENT_ID") or _tf_output("cognito_admin_client_id")
+    client_secret = os.getenv("E2E_ADMIN_CLIENT_SECRET") or _tf_output("cognito_admin_client_secret")
+    resp = requests.post(
+        token_url,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "https://api.getcloudledger.com/admin",
+        },
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
+@pytest.fixture(scope="session")
 def db() -> Generator[psycopg.Connection, None, None]:
     conn = psycopg.connect(
         os.getenv("E2E_DB_URL", "postgresql://admin:secret123@localhost:7001/cloudledger"),

@@ -40,8 +40,9 @@ def _insert_event(db: psycopg.Connection, event_id: uuid.UUID, aggregate_id: uui
 
 class TestCleanup:
     @pytest.fixture(scope="class")
+    @classmethod
     def seeded(
-        self, db: psycopg.Connection, lambda_client: Any
+        cls, db: psycopg.Connection, lambda_client: Any
     ) -> Generator[dict[str, Any], None, None]:
         ids = {
             "expired_key": f"e2e-cleanup-expired-{uuid.uuid4()}",

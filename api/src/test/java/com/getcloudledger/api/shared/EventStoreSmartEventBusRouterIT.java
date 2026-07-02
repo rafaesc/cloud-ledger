@@ -7,8 +7,8 @@ import com.getcloudledger.api.shared.adapter.out.entities.DomainEventEntity;
 import com.getcloudledger.api.shared.adapter.out.entities.OutboxEntity;
 import com.getcloudledger.api.shared.adapter.out.repository.JpaDomainEventRepository;
 import com.getcloudledger.api.shared.adapter.out.repository.JpaOutboxRepository;
+import com.getcloudledger.api.shared.adapter.out.sqs.SqsEventBus;
 import com.getcloudledger.api.shared.domain.bus.event.BaseEvent;
-import com.getcloudledger.api.shared.domain.bus.event.EventBus;
 import com.getcloudledger.api.shared.domain.service.EventStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,7 +59,7 @@ class EventStoreSmartEventBusRouterIT extends AbstractIntegrationTest {
      * and we can assert exactly when the after-commit publish fires.
      */
     @MockitoBean(name = "sqsEventBus")
-    private EventBus sqsEventBus;
+    private SqsEventBus sqsEventBus;
 
     @Test
     @DisplayName("saveEvents | on SQS success: persists events, publishes to SQS after commit, writes no outbox rows")

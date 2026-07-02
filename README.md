@@ -146,6 +146,13 @@ cd lambdas && uv run pytest
 | `GET` | `/v1/accounts/{accountId}/transactions` | Paginated transaction history — params: `limit` (default 50, max 200), `cursor` (opaque, base64), `order` (`desc`/`asc`) |
 | `GET` | `/v1/accounts` | List accounts by owner — param: `owner_id` (must match JWT `sub`) |
 
+**Admin endpoints** are gated by a separate `api/admin` Cognito scope (a distinct M2M client — never handed to the regular read/write workload) instead of account ownership:
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/admin/projections/rebuild` | Rebuild the DynamoDB read model by re-publishing persisted events to SQS — `?account_id=` replays one aggregate, omitted replays every aggregate. Returns `202` `{job_id, status: RUNNING, total_events, ...}` |
+| `GET` | `/v1/admin/projections/rebuild/{jobId}` | Poll rebuild progress — `{status: RUNNING\|DONE\|FAILED, total_events, processed_events, started_at, finished_at, error?}` |
+
 ---
 
 ## Repository Layout
@@ -159,6 +166,10 @@ cloud-ledger/
 │       │   ├── adapter/out/cache/  # Redis BalanceCache adapter
 │       │   ├── application/        # Command + CommandHandler per use case
 │       │   └── domain/             # Account aggregate, events, TransferPolicy
+│       ├── admin/                  # Operator-only DynamoDB projection rebuild (api/admin scope)
+│       │   ├── adapter/in/web/     # AdminController (same CQRS pattern as account/)
+│       │   ├── adapter/out/persistence/  # rebuild_jobs JPA entity/repository
+│       │   └── application/        # Command+Query/Handler per use case, batched event replayer
 │       └── shared/                 # EventBus, CommandBus, EventStore, JPA entities, SecurityConfig
 ├── lambdas/                    # Python 3.12 (uv-managed)
 │   ├── shared/                 # db.py, sqs.py, dynamo.py connection factories
@@ -298,7 +309,7 @@ The `k6/` suite is the "prove it" layer — it drives the running API and assert
 
 ---
 
-## The Three Demo Scenarios
+## The Demo Scenarios
 
 These demonstrate the system's core correctness guarantees:
 
@@ -310,3 +321,6 @@ Fire two transfers from the same account simultaneously. One lands first and adv
 
 **3. Async CQRS projection demo**
 Issue a transfer. The command commits to Aurora, immediately write-throughs the new balance to Redis, and publishes the events directly to SQS (no outbox delay on the happy path). The projector Lambda consumes SQS within seconds and writes the durable `BALANCE` and `TXNS#` items to DynamoDB. `GET /balance` returns instantly from Redis. `GET /transactions` returns the new entry once the projector has caught up — no Aurora replay required.
+
+**4. Read-model rebuild demo**
+Delete an account's DynamoDB items outright — simulating a lost or corrupted read model. `POST /v1/admin/projections/rebuild?account_id=<id>` (an operator-only `api/admin`-scoped endpoint, separate from the regular read/write M2M client) returns `202` with a job id and replays every persisted event for that aggregate straight from Aurora back through SQS, in bounded batches so no aggregate's full history is ever held in memory at once. Poll `GET /v1/admin/projections/rebuild/{jobId}` to `DONE`, then `GET /balance` again — it matches exactly, because Aurora's append-only event log, not DynamoDB, is the source of truth. This is the same guarantee from scenario 1 taken to its logical conclusion: the read model is disposable and fully reconstructable from the log at any time.

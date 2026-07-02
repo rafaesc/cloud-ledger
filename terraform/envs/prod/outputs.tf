@@ -14,6 +14,17 @@ output "cognito_client_secret" {
   sensitive   = true
 }
 
+output "cognito_admin_client_id" {
+  description = "M2M admin app client ID — holds the api/admin scope"
+  value       = module.auth.admin_client_id
+}
+
+output "cognito_admin_client_secret" {
+  description = "M2M admin app client secret"
+  value       = module.auth.admin_client_secret
+  sensitive   = true
+}
+
 output "alb_dns_name" {
   description = "ALB DNS name — entry point for all API traffic"
   value       = module.compute.alb_dns_name

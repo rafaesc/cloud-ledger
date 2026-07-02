@@ -3,7 +3,7 @@ package com.getcloudledger.api.account.adapter.in.web;
 import com.getcloudledger.api.shared.adapter.in.PostgresContainerBase;
 import com.getcloudledger.api.shared.adapter.in.RedisContainerBase;
 import com.getcloudledger.api.shared.adapter.out.repository.JpaDomainEventRepository;
-import com.getcloudledger.api.shared.domain.bus.event.EventBus;
+import com.getcloudledger.api.shared.adapter.out.sqs.SqsEventBus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +48,7 @@ class TransferControllerIT {
     private JpaDomainEventRepository jpaDomainEventRepository;
 
     @MockitoBean(name = "sqsEventBus")
-    private EventBus sqsEventBus;
+    private SqsEventBus sqsEventBus;
 
     @Test
     @DisplayName("transfer | returns 201 and persists TransferDebited + TransferCredited events when both accounts exist")
